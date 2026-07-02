@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "yoagent-state"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09753609190784c9f08f472ab1f47ff7e2314be2a8de425d7c400e4a5daf8ec1"
+checksum = "c7745b432c1d947c2e90b44c14b96d5809168fb8ab5e92e9a6a687d423c3266e"
 dependencies = [
  "async-trait",
  "chrono",
