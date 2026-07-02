@@ -244,7 +244,7 @@ Whatever an agent exposes picks its rung. This is how any agent — named or not
 
 The cheap path for a Rust agent to satisfy Part I. A Python or TS agent implements the same layout itself and does not need this.
 
-`yoagent-state` (v0.2.0, MIT) is an ActiveGraph-inspired continuity runtime. It records the append-only event log, folds it into the semantic graph, and ships the read-side primitives Part I only implies: **lineage queries, replay, fork, diff, typed packs, policy gates, behavior subscriptions.** You don't hand-author the log format — the runtime writes it via `apply_ops`.
+`yoagent-state` (v0.3.0, MIT) is an ActiveGraph-inspired continuity runtime. It records the append-only event log, folds it into the semantic graph, and ships the read-side primitives Part I only implies: **lineage queries, replay, fork, diff, typed packs, policy gates, behavior subscriptions.** You don't hand-author the log format — the runtime writes it via `apply_ops`.
 
 **Why this and not ActiveGraph directly.** ActiveGraph is the inspiration, credited in the repo's `ACKNOWLEDGMENTS.md`. But it is Python, and the target agents are Rust single binaries shipped via brew/git-URL init; a Python sidecar or FFI in the hot path breaks the distribution story and fragments the event vocabulary across two implementations. Using ActiveGraph directly wouldn't even save work — it stores to its own event store, so a git adapter is needed either way. Being the canonical Rust implementation of "the log is the agent" is the stronger position; attribution plus protocol-compatibility claims the lineage without the dependency.
 
@@ -271,10 +271,7 @@ print!("{}", state.lineage(node).await.to_markdown());        // the read side P
 
 For callback-driven agents, the `YoAgentStateSink` trait is the in-process adapter — `on_run_started`, `on_run_finished`, `on_model_called`, `on_model_finished`, `on_tool_called`, `on_tool_finished` — i.e. the integration contract as a typed interface; `YoAgentStateAdapter` is the shipped impl. Scoring uses the same primitives — `patch`/`eval`/`decision`, **policy gates** for the promotion gate (thresholds as config), **fork** for counterfactual A/B.
 
-**Known 0.2.0 gaps against Part I — the 0.3.0 work list:**
-
-1. **The git-backed store.** Two impls ship today: `MemoryEventStore` (tests) and `JsonlEventStore` (writes `events.jsonl`; the CLI points it via `YOAGENT_STATE_EVENTS` — set it to `state/events.jsonl` to match the layout). But `JsonlEventStore` (verified in source) rewrites the whole file on each append and guards with an in-process `tokio::sync::Mutex` only — fine for small logs, yet it satisfies neither store-contract guarantee at scale. A `GitEventStore` that appends-and-fsyncs per event, commits at run boundaries, and honors a cross-process lease inside `append` is exactly what the store contract specifies — and exactly what remains to build.
-2. **The pairing rule.** The 0.2.0 `record_*` helpers emit the domain event and its ops event but do **not** set the ops event's `causation_id` to the domain event's id (both are appended with `causation_id: null`). Part I's pairing rule requires the link; 0.3.0 threads it through so emitted logs pass check 7.
+**The store contract ships in 0.3.0.** Three `EventStore` impls: `MemoryEventStore` (tests), `JsonlEventStore` (small logs; rewrites the whole file per append, in-process lock only — kept for compatibility), and **`GitEventStore`**, which satisfies both store-contract guarantees: append + flush + fsync per batch (plus a parent-directory fsync on first creation), an atomically-acquired cross-process single-writer lease checked *inside* `append`, and pathspec-scoped boundary commits via `commit_run(&RunId, &GoalId, outcome, extra_paths)` carrying the `Run-Id`/`Goal`/`Outcome` trailers. The pairing rule is implemented (every `record_*` helper links its ops event's `causation_id` to the domain event), domain events inside an open run auto-chain to `run.started`, and run transitions are validated (double-start / mismatched-finish are errors). Repos emitted through `GitEventStore` pass all 7 conformance checks (Part VI).
 
 ## What yoagent-state subsumes
 
@@ -350,7 +347,8 @@ Because yoyo's existing layout predates GASP, `AGENT.md` declares where identity
 **Reference-impl specific:**
 
 - **Determinism.** True *transcript* replay needs cached model/tool responses (an idea inherited from ActiveGraph). Not needed for the semantic-log hot path; only if you enable transcript replay.
-- **Maturity.** `yoagent-state` is young (v0.2.0) and small by design — it deliberately does not handle identity/skills/memory, which is Part I's job, not a gap. The API will move; pin versions, track its ROADMAP, and keep the event vocabulary protocol-compatible with ActiveGraph so the lineage claim stays clean.
+- **Maturity.** `yoagent-state` is young (v0.3.0) and small by design — it deliberately does not handle identity/skills/memory, which is Part I's job, not a gap. The API will move (0.3.0 already validates run transitions where 0.2.0 did not); pin versions, track its CHANGELOG, and keep the event vocabulary protocol-compatible with ActiveGraph so the lineage claim stays clean.
+- **Lease scope.** `GitEventStore`'s file lease is decided by atomic exclusive create — sound on a local filesystem, advisory on network filesystems, and stealing an *expired* lease retains a narrow multi-process race window. One agent repo per machine (the intended deployment) is well inside the guarantee.
 
 ---
 
