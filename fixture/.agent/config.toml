@@ -1,0 +1,7 @@
+# Executor binding — the only file that changes on a model/runtime swap.
+[executor]
+model = "claude-fable-5"
+provider = "anthropic"
+
+[state]
+events = "state/events.jsonl"
