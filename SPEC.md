@@ -58,8 +58,9 @@ agent-repo/
 ├── snapshots/                # PROJECTION checkpoints for fast restore (optional)
 │   └── <event-id>/graph.json # materialized projection at a log position (+ integrity record)
 └── .agent/                   # control plane
-    ├── HEAD                  # last applied event id            (LOCAL-ONLY, gitignored)
+    ├── HEAD                  # last applied event id (reserved; LOCAL-ONLY, gitignored)
     ├── config.toml           # executor binding: model, provider (COMMITTED — restore reads it)
+    ├── packs/                # optional vocabulary packs, *.json (COMMITTED — check 3 reads them)
     └── lease                 # active-worker lease              (LOCAL-ONLY, gitignored)
 ```
 
@@ -91,12 +92,12 @@ What's first-class vs derived — four tiers, not two:
 
 Two event families share the log:
 
-1. **Domain events** — the semantic record. `kind` is `entity.verb`: `goal.created`, `goal.status_changed`, `task.created`, `task.status_changed`, `run.started`, `run.finished`, `observation.created`, `failure.observed`, `hypothesis.created`, `patch.proposed`, `patch.status_changed`, `eval.finished`, `decision.created`, `model.called`, `model.finished`, `tool.called`, `artifact.attached`, `frame.created`, `project.snapshot_recorded`. The `payload` is the entity.
+1. **Domain events** — the semantic record. `kind` is `entity.verb`: `goal.created`, `goal.status_changed`, `task.created`, `task.status_changed`, `run.started`, `run.finished`, `observation.created`, `failure.observed`, `hypothesis.created`, `patch.proposed`, `patch.status_changed`, `eval.finished`, `decision.created`, `model.called`, `model.finished`, `tool.called`, `tool.finished`, `artifact.attached`, `frame.created`, `project.snapshot_recorded`. The `payload` is the entity.
 2. **State-ops events** — `kind` is `state.ops_applied`, `payload` is an array of graph mutations. **This is the only family the reducer folds into the graph;** domain events are a parallel human-and-machine-readable audit layer. The ops are: `CreateNode {id, kind, props}`, `UpdateNode {id, props}` (deep-merge), `TombstoneNode {id, reason}`, `CreateRelation {from, rel, to, props}`, `DeleteRelation {from, rel, to}`, `MarkStale {id, reason}`, `AttachArtifact {id, artifact}`. They serialize externally-tagged: `{"CreateNode": { ... }}`.
 
-**Pairing rule (normative).** A domain event that mutates state is immediately followed by exactly one `state.ops_applied` event whose `causation_id` is the domain event's `id`, and the ops MUST be derivable from the domain event's payload — the runtime's typed emit helpers are the only writer of ops; hand-authored ops that disagree with their domain event are non-conformant. This is what keeps the audit layer and the folded graph from silently diverging, and it is mechanically verified (check 7). A `state.ops_applied` with a `null` causation (an ops-only maintenance mutation) is permitted but must not restate a domain entity.
+**Pairing rule (normative).** An **entity-creating domain event** — `goal.created`, `task.created`, `observation.created`, `failure.observed`, `hypothesis.created`, `patch.proposed`, `eval.finished`, `decision.created`, `frame.created` — is followed by exactly one `state.ops_applied` event whose `causation_id` is the domain event's `id` and whose ops create the entity. The ops MUST be consistent with the domain event's payload — the entity's id, kind, and status are mechanically checked (check 7); richer ops in the same pair (extra relations, artifact attachments) are permitted so long as they do not contradict it. Raw-layer kinds (`run.started`, `model.called`, `tool.called`, …) and `*.status_changed` MAY pair the same way but are not required to. An ops event's `causation_id` must name a domain event, never another ops event. A `state.ops_applied` with a `null` causation (an ops-only maintenance mutation) is permitted but must not restate a domain entity. This is what keeps the audit layer and the folded graph from silently diverging.
 
-Node **kinds** that `CreateNode` uses: `goal`, `task`, `run`, `observation`, `failure`, `hypothesis`, `patch`, `eval`, `decision`, `model_call`, `tool_call`, `frame`, `project_snapshot`. (Artifacts attach to nodes via `AttachArtifact`; `policy` and `behavior` are governance types.)
+Node **kinds** that `CreateNode` uses: `goal`, `task`, `run`, `observation`, `failure`, `hypothesis`, `patch`, `eval`, `decision`, `model_call`, `tool_call`, `frame`, `project_snapshot`, plus the governance types `policy` and `behavior`. (Artifacts attach to nodes via `AttachArtifact`.)
 
 Relation **kinds** that `CreateRelation` uses: `serves`, `blocks`, `advances`, `observes`, `explains`, `addresses`, `modifies`, `validated_by`, `approved_by`, `rejected_by`, `produced_by`, `derived_from`, `depends_on`, `supersedes`, `contained_in_frame`, `forked_from`, `references`.
 
@@ -110,7 +111,7 @@ A "session," in human terms, is a `run` (one execution) under a `task` under a `
 
 ## Worked example — a self-improvement run
 
-A complete run where a skill patch is tested and promoted. Ids are shortened for readability (the runtime generates `event_<uuid>`, `goal_<uuid>`, …). Lines alternate the **domain event** with the **`state.ops_applied`** event that mutates the graph (note each ops event's `causation_id` is its domain event — the pairing rule); only the latter folds into state.
+A complete run where a skill patch is tested and promoted. Ids are shortened for readability (the runtime generates `event_<uuid>`, `goal_<uuid>`, …). Each **entity-creating domain event** is followed by the **`state.ops_applied`** event that mutates the graph (note each ops event's `causation_id` is its domain event — the pairing rule); raw-layer events (`run.started`, `tool.called`) go unpaired here, as the rule permits. Only ops events fold into state.
 
 ```jsonl
 {"id":"event_01","schema_version":1,"ts_ms":1739000000000,"actor":{"kind":"agent","id":"evolve"},"kind":"goal.created","payload":{"id":"goal_retry","title":"Make retry reliable","summary":"retries drop state after timeout","status":"Open","owner":{"kind":"agent","id":"evolve"},"metadata":{}},"causation_id":null,"correlation_id":"goal_retry"}
@@ -165,7 +166,7 @@ restore <git-url> [--at <event-id>] [--model <model>]
 5. Bind the chosen model/provider as the executor.
 6. Resume: take the lease, continue the loop.
 
-**Snapshot integrity (normative).** A snapshot at `snapshots/<event-id>/graph.json` MUST carry an integrity record: the event id it folds through, the log line count at that point, and a content hash (SHA-256) of the log prefix up to and including that line. Restore verifies the record against the cloned log before seeding; on mismatch (rebased history, sharded log) it falls back to a full fold. A snapshot is an optimization, never an authority.
+**Snapshot integrity (normative).** A snapshot at `snapshots/<event-id>/graph.json` is a JSON object `{"graph": <the folded graph>, "integrity": {"event_id": "...", "line_count": N, "sha256": "..."}}` where `line_count` is the number of physical lines of `state/events.jsonl` the snapshot folds through, `event_id` is the id of the last event in that prefix, and `sha256` is the SHA-256 of the **raw bytes** of those `line_count` lines, including their newlines. Restore verifies the record against the cloned log before seeding; on mismatch (rebased history, sharded log) it falls back to a full fold. A snapshot is an optimization, never an authority.
 
 "Same agent, everywhere" = the same clone + fold on any machine. "Knows about you" = `identity/`, `memory/`, and the log's lineage all travel with the repo.
 
@@ -211,7 +212,10 @@ The model is a pure function `model.next(view) -> decision`; it holds no durable
    Outcome: promoted
    ```
 3. **Projections are free to rewrite** — they are deterministic folds of the log. (`facts.jsonl` is not a projection — it is append-only; see Memory.)
-4. **Identity changes are human-gated** and follow a defined procedure: one commit, made or approved by a human, that (a) edits `identity/`, (b) updates the identity hash in `AGENT.md`, and (c) appends a `decision` event recording who approved the change and why. All three in the same commit, so the hash in the manifest never disagrees with `identity/` at any point in history — an identity edit that skips the hash update would otherwise permanently fail restore step 2.
+4. **Identity changes are human-gated** and follow a defined procedure: one commit, made or approved by a human, that (a) edits `identity/`, (b) updates the identity hash in `AGENT.md`, and (c) appends a `decision` event recording who approved the change and why. All three in the same commit, so the hash in the manifest never disagrees with `identity/` at any point in history — an identity edit that skips the hash update would otherwise permanently fail restore step 2. The identity hash is SHA-256 over each `identity/` file's relative path followed by a newline and its bytes, in byte-order-sorted path order:
+   ```
+   for f in $(LC_ALL=C find identity -type f | sort); do printf '%s\n' "$f"; cat "$f"; done | shasum -a 256
+   ```
 5. **Skills are versioned commits**, one change per commit, so each version is a pinnable hash a `patch` references as its `artifact`.
 6. **Single-writer lease** before appending (`.agent/lease`, worker id + TTL, **local-only and gitignored**) prevents concurrent-writer corruption. Multiplayer and A/B use branches, not concurrent writes to one ref.
 7. **Snapshots on cadence** (`snapshots/<event-id>/graph.json` + integrity record) so restore folds from a checkpoint instead of all of history.
@@ -259,19 +263,21 @@ Neither guarantee is part of GASP — another language's impl meets conformance 
 
 ## API shape
 
-Verified against the v0.2.0 source. `load` folds the log into the graph (the projector folds **only** `state.ops_applied`, exactly as Part I specifies); typed `record_*` helpers emit a domain event **and** the `state.ops_applied` that mutates it; `apply_ops` is the low-level path:
+Verified against the v0.3.0 source. `load` folds the log into the graph (the projector folds **only** `state.ops_applied`, exactly as Part I specifies). The **paired** typed helpers — `record_goal`, `record_task`, `record_observation`, `record_failure`, `record_hypothesis`, `propose_patch`, `record_eval`, `record_decision_node`, `record_frame`, plus `record_run_started`, `record_model_call`, `record_tool_call`, `record_project_snapshot`, and the `update_*_status` family — emit a domain event **and** the `state.ops_applied` that mutates it, linked per the pairing rule. (`record_decision`, `record_eval_result`, and `link` are lower-level ops-only paths; `apply_ops` is the raw escape hatch.)
 
 ```rust
 let state = YoAgentState::load(store).await?;                  // fold events -> graph
 state.record_goal(Goal::new(goal_id, "Make retry reliable", "...", actor)).await?;
 state.record_eval(actor, eval_result, Some(patch_id)).await?; // eval + patch validated_by eval
-state.record_decision(actor, decision_id, patch_id, /*approved=*/ true, "promote").await?;
+state.record_decision_node(actor, decision, Some(patch_node)).await?; // decision + approved_by
 print!("{}", state.lineage(node).await.to_markdown());        // the read side Part I implies
 ```
 
 For callback-driven agents, the `YoAgentStateSink` trait is the in-process adapter — `on_run_started`, `on_run_finished`, `on_model_called`, `on_model_finished`, `on_tool_called`, `on_tool_finished` — i.e. the integration contract as a typed interface; `YoAgentStateAdapter` is the shipped impl. Scoring uses the same primitives — `patch`/`eval`/`decision`, **policy gates** for the promotion gate (thresholds as config), **fork** for counterfactual A/B.
 
-**The store contract ships in 0.3.0.** Three `EventStore` impls: `MemoryEventStore` (tests), `JsonlEventStore` (small logs; rewrites the whole file per append, in-process lock only — kept for compatibility), and **`GitEventStore`**, which satisfies both store-contract guarantees: append + flush + fsync per batch (plus a parent-directory fsync on first creation), an atomically-acquired cross-process single-writer lease checked *inside* `append`, and pathspec-scoped boundary commits via `commit_run(&RunId, &GoalId, outcome, extra_paths)` carrying the `Run-Id`/`Goal`/`Outcome` trailers. The pairing rule is implemented (every `record_*` helper links its ops event's `causation_id` to the domain event), domain events inside an open run auto-chain to `run.started`, and run transitions are validated (double-start / mismatched-finish are errors). Repos emitted through `GitEventStore` pass all 7 conformance checks (Part VI).
+**The store contract ships in 0.3.0.** Three `EventStore` impls: `MemoryEventStore` (tests), `JsonlEventStore` (small logs; rewrites the whole file per append, in-process lock only — kept for compatibility), and **`GitEventStore`**, which satisfies both store-contract guarantees: append + flush + fsync per batch (plus a parent-directory fsync on first creation), an atomically-acquired cross-process single-writer lease checked *inside* `append`, and pathspec-scoped boundary commits via `commit_run(&RunId, &GoalId, outcome, extra_paths)` carrying the `Run-Id`/`Goal`/`Outcome` trailers. The pairing rule is implemented (the paired helpers link each ops event's `causation_id` to its domain event), domain events inside an open run auto-chain to `run.started`, and run transitions are validated (double-start / mismatched-finish are errors). Repos emitted through the **paired `record_*` helpers + `GitEventStore`** pass all 7 conformance checks (Part VI).
+
+**Known 0.3.0 gaps** (tracked for 0.3.x): the `YoAgentStateSink` adapter path records raw events without opening a run or pairing ops, so adapter-emitted logs are **not** yet conformant (its `failure.observed` lacks an `id` and a pair; its events root at raw kinds); `correlation_id` is never populated by the helpers; `run.finished` has no ops pair, so the folded run node's status stays `started`; and there is no snapshot emitter yet — the conformance checker is the executable definition of the snapshot format.
 
 ## What yoagent-state subsumes
 
@@ -376,19 +382,19 @@ Folding `state/events.jsonl` MUST yield a graph in which:
 - `patch_9 --validated_by--> eval_5`, and `eval_5.status = Passed`;
 - `patch_9 --approved_by--> decision_3`, and `decision_3.status = Approved`.
 
-A runtime that clones the fixture, loads `identity/` + `skills/`, folds the log, and reports that graph has proven Part I restore.
+A runtime that points at a fixture checkout, loads `identity/` + `skills/`, folds the log, and reports that graph has proven Part I restore.
 
 ## The checker — what "conformant" verifies
 
 `conformance-check <repo>` runs seven checks and exits non-zero on any failure:
 
 1. **Envelope round-trip.** Every line parses to the event envelope (`id, schema_version, ts_ms, actor, kind, payload, causation_id, correlation_id`) and re-serializes structurally equal — no unknown top-level fields, none missing.
-2. **Replay determinism.** Folding the log twice yields identical graphs; folding `snapshot + tail` equals folding from scratch, and the snapshot's integrity record matches the log prefix. (If model/tool replay is enabled, responses must be cached so this holds.)
+2. **Replay.** Folding the log succeeds, and every snapshot equals the fold of the log prefix named by its integrity record (whose raw-byte hash and terminal event id must match the log — the Part I snapshot format). (If model/tool replay is enabled, responses must be cached so folds stay reproducible.)
 3. **Vocabulary.** Every `CreateNode.kind` and `CreateRelation.rel` is in the baseline vocabulary or in a `Pack` the repo declares at `.agent/packs/*.json`. Unknown kinds without a declaring pack fail.
-4. **Append-only-in-git.** For every commit touching an append-only path (`state/events.jsonl`, `*/facts.jsonl`, `JOURNAL.md`), the diff adds lines at EOF only — no modification or deletion of existing lines. Walk the git history; any in-place edit fails. (This, not a pre-commit hook, is the enforcement.)
-5. **Causation integrity.** Every non-null `causation_id` references an earlier event id in the log; the chain is acyclic and roots at a `*.created` / `*.started` event.
-6. **Restore.** Cloning the repo, loading identity/skills, and folding the log succeeds and reproduces the asserted graph — run against the fixture, and against the candidate's own emitted repo as a self-test.
-7. **Domain↔ops consistency (the pairing rule).** Every `state.ops_applied` whose `causation_id` names a domain event mutates only entities/relations consistent with that event's payload (ids match; status values match; created kinds match the event's entity). A domain event that mutates state with no paired ops event, or an ops event that contradicts its domain event, fails.
+4. **Append-only-in-git.** For every commit touching an append-only path (`state/events.jsonl`, `*/facts.jsonl`, `JOURNAL.md`), the diff adds lines at EOF only — no modification or deletion of existing lines, and the working tree must extend the last committed version. Walk the git history (full history, no simplification); any in-place edit or deletion fails, a directory that is not a git repository fails (conformance rule 1), and any error during the walk fails closed. (This, not a pre-commit hook, is the enforcement.)
+5. **Causation integrity.** Event ids are unique; every non-null `causation_id` references an earlier event id in the log (which makes the chain acyclic); roots (null causation) are `*.created` / `*.started` events or ops-only `state.ops_applied` maintenance events (per the pairing rule).
+6. **Restore.** The manifest (`AGENT.md`) and identity are present and the log folds; run with `--fixture` against the fixture, the fold must additionally reproduce the four asserted graph facts. (Manifest-declared alternate locations, skills loading, and identity-hash verification are the runtime's restore obligations — not yet mechanically checked here.)
+7. **Domain↔ops consistency (the pairing rule).** Every entity-creating domain event (the Part I table: `goal.created`, `task.created`, `observation.created`, `failure.observed`, `hypothesis.created`, `patch.proposed`, `eval.finished`, `decision.created`, `frame.created`) is materialized by **exactly one** paired `state.ops_applied` whose `CreateNode` matches the payload's id, kind, and status — all claimants are checked, so a decoy pair cannot shadow a contradiction. An ops event chained to another ops event fails.
 
 ## The conformance claim
 

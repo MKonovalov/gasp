@@ -1,24 +1,23 @@
 //! GASP conformance checks (SPEC.md Part VI).
 //!
 //! Each check takes the parsed log (and/or the repo path) and returns a
-//! `CheckReport`. `run_all` runs the seven checks in spec order.
+//! `CheckReport`. `run_all` runs the seven checks in spec order. A checker's
+//! cardinal rule: an internal error must never flip a FAIL into a PASS —
+//! every unexpected condition fails closed.
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
-use yoagent_state::{replay, Event, Graph, NodeId, Pack, StateOp};
+use yoagent_state::{replay, Event, Graph, Pack, StateOp};
 
 pub const EVENTS_PATH: &str = "state/events.jsonl";
 
-/// Append-only paths per Part I commit rule 1, checked when present.
-pub const APPEND_ONLY_PATHS: &[&str] = &[
-    "state/events.jsonl",
-    "memory/facts.jsonl",
-    "journal/JOURNAL.md",
-    "JOURNAL.md",
-];
+/// Append-only paths per Part I commit rule 1. `state/events.jsonl`,
+/// `JOURNAL.md` variants, and every tracked `facts.jsonl` (any directory —
+/// the spec's `*/facts.jsonl` glob) are checked when present.
+const APPEND_ONLY_STATIC: &[&str] = &["state/events.jsonl", "journal/JOURNAL.md", "JOURNAL.md"];
 
 const ENVELOPE_KEYS: &[&str] = &[
     "id",
@@ -71,6 +70,8 @@ const BASELINE_RELS: &[&str] = &[
 
 /// Domain-event kinds that create an entity and therefore REQUIRE a paired
 /// `state.ops_applied` (check 7), mapped to the node kind the pair must create.
+/// This table is normative (SPEC.md check 7); raw-layer kinds (`run.started`,
+/// `model.called`, `tool.called`, ...) MAY pair but are not required to.
 const PAIRED_KINDS: &[(&str, &str)] = &[
     ("goal.created", "goal"),
     ("task.created", "task"),
@@ -101,20 +102,27 @@ impl CheckReport {
         }
     }
 
+    fn failed(number: u8, name: &'static str, reason: String) -> Self {
+        let mut report = Self::new(number, name);
+        report.failures.push(reason);
+        report
+    }
+
     pub fn passed(&self) -> bool {
         self.failures.is_empty()
     }
 }
 
-pub fn read_log_lines(repo: &Path) -> Result<Vec<String>, String> {
+pub fn read_log_raw(repo: &Path) -> Result<String, String> {
     let path = repo.join(EVENTS_PATH);
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    Ok(raw
-        .lines()
+    std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+pub fn log_lines(raw: &str) -> Vec<String> {
+    raw.lines()
         .filter(|l| !l.trim().is_empty())
         .map(str::to_string)
-        .collect())
+        .collect()
 }
 
 pub fn parse_events(lines: &[String]) -> Result<Vec<Event>, String> {
@@ -127,15 +135,24 @@ pub fn parse_events(lines: &[String]) -> Result<Vec<Event>, String> {
         .collect()
 }
 
-fn ops_of(event: &Event) -> Option<Vec<StateOp>> {
-    if event.kind != "state.ops_applied" {
-        return None;
-    }
-    serde_json::from_value(event.payload.clone()).ok()
+enum OpsPayload {
+    NotOps,
+    Ops(Vec<StateOp>),
+    Malformed(serde_json::Error),
 }
 
-/// Check 1 — envelope round-trip: exact key set, parses to the envelope,
-/// re-serializes structurally equal.
+fn ops_of(event: &Event) -> OpsPayload {
+    if event.kind != "state.ops_applied" {
+        return OpsPayload::NotOps;
+    }
+    match serde_json::from_value(event.payload.clone()) {
+        Ok(ops) => OpsPayload::Ops(ops),
+        Err(err) => OpsPayload::Malformed(err),
+    }
+}
+
+/// Check 1 — envelope round-trip: exact top-level key set, parses to the
+/// envelope, re-serializes structurally equal.
 pub fn check_envelope(lines: &[String]) -> CheckReport {
     let mut report = CheckReport::new(1, "envelope round-trip");
     for (i, line) in lines.iter().enumerate() {
@@ -182,24 +199,15 @@ pub fn check_envelope(lines: &[String]) -> CheckReport {
     report
 }
 
-/// Check 2 — replay determinism, plus snapshot integrity + snapshot-equivalence
-/// when `snapshots/` exists.
-pub fn check_replay(repo: &Path, events: &[Event], lines: &[String]) -> CheckReport {
-    let mut report = CheckReport::new(2, "replay determinism");
-    let first = replay(events);
-    let second = replay(events);
-    match (first, second) {
-        (Ok(a), Ok(b)) => {
-            if a != b {
-                report
-                    .failures
-                    .push("folding the log twice yielded different graphs".into());
-            }
-        }
-        (Err(e), _) | (_, Err(e)) => {
-            report.failures.push(format!("fold failed: {e}"));
-            return report;
-        }
+/// Check 2 — replay: folding the log succeeds, and every snapshot equals the
+/// fold of the log prefix named by its integrity record. The integrity hash
+/// is SHA-256 over the RAW BYTES of the first `line_count` physical lines of
+/// `state/events.jsonl` (including their newlines).
+pub fn check_replay(repo: &Path, events: &[Event], raw_log: &str) -> CheckReport {
+    let mut report = CheckReport::new(2, "replay");
+    if let Err(e) = replay(events) {
+        report.failures.push(format!("fold failed: {e}"));
+        return report;
     }
 
     let snapshots = repo.join("snapshots");
@@ -207,20 +215,37 @@ pub fn check_replay(repo: &Path, events: &[Event], lines: &[String]) -> CheckRep
         report.notes.push("no snapshots/ — skipped seed check".into());
         return report;
     }
-    let Ok(entries) = std::fs::read_dir(&snapshots) else {
-        report.failures.push("cannot read snapshots/".into());
-        return report;
+    let entries = match std::fs::read_dir(&snapshots) {
+        Ok(entries) => entries,
+        Err(e) => {
+            report.failures.push(format!("cannot read snapshots/: {e}"));
+            return report;
+        }
     };
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                report
+                    .failures
+                    .push(format!("cannot read snapshots/ entry: {e}"));
+                continue;
+            }
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
         let graph_path = entry.path().join("graph.json");
         if !graph_path.is_file() {
+            report
+                .notes
+                .push(format!("snapshot {name}: no graph.json — not verified"));
             continue;
         }
-        let name = entry.file_name().to_string_lossy().to_string();
         let raw = match std::fs::read_to_string(&graph_path) {
             Ok(r) => r,
             Err(e) => {
-                report.failures.push(format!("snapshot {name}: unreadable: {e}"));
+                report
+                    .failures
+                    .push(format!("snapshot {name}: unreadable: {e}"));
                 continue;
             }
         };
@@ -237,27 +262,58 @@ pub fn check_replay(repo: &Path, events: &[Event], lines: &[String]) -> CheckRep
                 .push(format!("snapshot {name}: missing `graph` or `integrity` record"));
             continue;
         };
-        let line_count = integrity
-            .get("line_count")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as usize;
-        let expected_sha = integrity
-            .get("sha256")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        if line_count == 0 || line_count > lines.len() {
+        let Some(line_count) = integrity.get("line_count").and_then(Value::as_u64) else {
+            report.failures.push(format!(
+                "snapshot {name}: integrity record missing numeric `line_count`"
+            ));
+            continue;
+        };
+        let Some(expected_sha) = integrity.get("sha256").and_then(Value::as_str) else {
             report
                 .failures
-                .push(format!("snapshot {name}: line_count {line_count} out of range"));
+                .push(format!("snapshot {name}: integrity record missing `sha256`"));
+            continue;
+        };
+
+        let prefix: String = raw_log
+            .split_inclusive('\n')
+            .take(line_count as usize)
+            .collect();
+        let physical_lines = raw_log.split_inclusive('\n').count() as u64;
+        if line_count == 0 || line_count > physical_lines {
+            report.failures.push(format!(
+                "snapshot {name}: line_count {line_count} out of range (log has {physical_lines} lines)"
+            ));
             continue;
         }
-        let prefix = lines[..line_count].join("\n") + "\n";
         let actual_sha = hex(&Sha256::digest(prefix.as_bytes()));
         if actual_sha != expected_sha {
             report.failures.push(format!(
                 "snapshot {name}: integrity hash mismatch (log prefix changed?)"
             ));
             continue;
+        }
+
+        let prefix_lines = log_lines(&prefix);
+        let prefix_events = match parse_events(&prefix_lines) {
+            Ok(events) => events,
+            Err(e) => {
+                report
+                    .failures
+                    .push(format!("snapshot {name}: prefix does not parse: {e}"));
+                continue;
+            }
+        };
+        if let Some(event_id) = integrity.get("event_id").and_then(Value::as_str) {
+            match prefix_events.last() {
+                Some(last) if last.id.as_str() == event_id => {}
+                _ => {
+                    report.failures.push(format!(
+                        "snapshot {name}: integrity event_id `{event_id}` is not the last event of the prefix"
+                    ));
+                    continue;
+                }
+            }
         }
         let snapshot_graph: Graph = match serde_json::from_value(graph_v.clone()) {
             Ok(g) => g,
@@ -268,42 +324,62 @@ pub fn check_replay(repo: &Path, events: &[Event], lines: &[String]) -> CheckRep
                 continue;
             }
         };
-        let prefix_fold = match replay(&events[..line_count]) {
-            Ok(g) => g,
-            Err(e) => {
-                report
-                    .failures
-                    .push(format!("snapshot {name}: prefix fold failed: {e}"));
-                continue;
-            }
-        };
-        if prefix_fold != snapshot_graph {
-            report.failures.push(format!(
-                "snapshot {name}: snapshot + tail differs from folding from scratch"
-            ));
+        match replay(&prefix_events) {
+            Ok(prefix_fold) if prefix_fold == snapshot_graph => {}
+            Ok(_) => report.failures.push(format!(
+                "snapshot {name}: snapshot differs from folding its log prefix"
+            )),
+            Err(e) => report
+                .failures
+                .push(format!("snapshot {name}: prefix fold failed: {e}")),
         }
     }
     report
 }
 
-fn load_packs(repo: &Path) -> Vec<Pack> {
+/// Pack files plus per-file problems — a corrupt declaration is a defect of
+/// the repo under test, never silently ignored.
+fn load_packs(repo: &Path) -> (Vec<Pack>, Vec<String>) {
     let dir = repo.join(".agent/packs");
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
+    if !dir.exists() {
+        return (Vec::new(), Vec::new());
+    }
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) => return (Vec::new(), vec![format!("cannot read .agent/packs/: {e}")]),
     };
-    entries
-        .flatten()
-        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
-        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
-        .filter_map(|raw| serde_json::from_str::<Pack>(&raw).ok())
-        .collect()
+    let mut packs = Vec::new();
+    let mut problems = Vec::new();
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(e) => {
+                problems.push(format!("cannot read .agent/packs/ entry: {e}"));
+                continue;
+            }
+        };
+        if path.extension().is_none_or(|x| x != "json") {
+            continue;
+        }
+        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        match std::fs::read_to_string(&path) {
+            Ok(raw) => match serde_json::from_str::<Pack>(&raw) {
+                Ok(pack) => packs.push(pack),
+                Err(e) => problems.push(format!("pack {name} does not parse as a Pack: {e}")),
+            },
+            Err(e) => problems.push(format!("pack {name} unreadable: {e}")),
+        }
+    }
+    (packs, problems)
 }
 
-/// Check 3 — vocabulary: node kinds and relation kinds are baseline or declared
-/// by a pack in `.agent/packs/*.json`.
+/// Check 3 — vocabulary: node kinds and relation kinds are baseline or
+/// declared by a pack at `.agent/packs/*.json`. Malformed packs and malformed
+/// ops payloads are failures, not skips.
 pub fn check_vocabulary(repo: &Path, events: &[Event]) -> CheckReport {
     let mut report = CheckReport::new(3, "vocabulary");
-    let packs = load_packs(repo);
+    let (packs, problems) = load_packs(repo);
+    report.failures.extend(problems);
     let mut kinds: HashSet<&str> = BASELINE_NODE_KINDS.iter().copied().collect();
     let mut rels: HashSet<&str> = BASELINE_RELS.iter().copied().collect();
     for pack in &packs {
@@ -311,7 +387,17 @@ pub fn check_vocabulary(repo: &Path, events: &[Event]) -> CheckReport {
         rels.extend(pack.relation_types.keys().map(String::as_str));
     }
     for (i, event) in events.iter().enumerate() {
-        let Some(ops) = ops_of(event) else { continue };
+        let ops = match ops_of(event) {
+            OpsPayload::NotOps => continue,
+            OpsPayload::Malformed(e) => {
+                report.failures.push(format!(
+                    "line {}: state.ops_applied payload does not parse as ops: {e}",
+                    i + 1
+                ));
+                continue;
+            }
+            OpsPayload::Ops(ops) => ops,
+        };
         for op in ops {
             match op {
                 StateOp::CreateNode { kind, id, .. } if !kinds.contains(kind.as_str()) => {
@@ -348,20 +434,49 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Check 4 — append-only-in-git: for every commit touching an append-only path,
-/// the previous version must be a byte prefix of the next (additions at EOF
-/// only). The working tree must extend the last committed version.
+/// Check 4 — append-only-in-git: for every commit touching an append-only
+/// path, the previous version must be a byte prefix of the next (additions at
+/// EOF only), and the working tree must extend the last committed version.
+/// This check is the spec's enforcement mechanism — every internal error
+/// fails closed.
 pub fn check_append_only(repo: &Path) -> CheckReport {
     let mut report = CheckReport::new(4, "append-only in git");
-    if git(repo, &["rev-parse", "HEAD"]).is_err() {
+    if git(repo, &["rev-parse", "--git-dir"]).is_err() {
         report
-            .notes
-            .push("no git history — nothing to violate yet".into());
+            .failures
+            .push("not a git repository (conformance rule 1: state lives in a git repo)".into());
         return report;
     }
-    for path in APPEND_ONLY_PATHS {
-        let Ok(shas) = git(repo, &["rev-list", "--reverse", "HEAD", "--", path]) else {
-            continue;
+    if git(repo, &["rev-parse", "--verify", "HEAD"]).is_err() {
+        report
+            .notes
+            .push("no commits yet — nothing to violate".into());
+        return report;
+    }
+
+    let mut paths: BTreeSet<String> = APPEND_ONLY_STATIC.iter().map(|s| s.to_string()).collect();
+    // the spec's `*/facts.jsonl` glob, resolved against tracked files
+    match git(repo, &["ls-files", "--", "facts.jsonl", "*/facts.jsonl"]) {
+        Ok(listed) => paths.extend(listed.lines().map(str::to_string)),
+        Err(e) => {
+            report
+                .failures
+                .push(format!("cannot enumerate facts.jsonl paths: {e}"));
+        }
+    }
+
+    for path in &paths {
+        let shas = match git(
+            repo,
+            &["rev-list", "--reverse", "--full-history", "HEAD", "--", path],
+        ) {
+            Ok(shas) => shas,
+            Err(e) => {
+                report
+                    .failures
+                    .push(format!("{path}: cannot walk history: {e}"));
+                continue;
+            }
         };
         let shas: Vec<&str> = shas.split_whitespace().collect();
         if shas.is_empty() {
@@ -394,19 +509,35 @@ pub fn check_append_only(repo: &Path) -> CheckReport {
                 }
             }
         }
-        if let (Some(prev), Ok(on_disk)) = (&prev, std::fs::read_to_string(repo.join(path))) {
-            if !on_disk.starts_with(prev.as_str()) {
-                report
-                    .failures
-                    .push(format!("{path}: working tree edits committed lines"));
+        if let Some(prev) = &prev {
+            match std::fs::read_to_string(repo.join(path)) {
+                Ok(on_disk) => {
+                    if !on_disk.starts_with(prev.as_str()) {
+                        report
+                            .failures
+                            .push(format!("{path}: working tree edits committed lines"));
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    report
+                        .failures
+                        .push(format!("{path}: committed file missing from working tree"));
+                }
+                Err(e) => {
+                    report
+                        .failures
+                        .push(format!("{path}: working tree unreadable: {e}"));
+                }
             }
         }
     }
     report
 }
 
-/// Check 5 — causation integrity: every non-null causation_id references an
-/// EARLIER event; roots (null causation) are `*.created` / `*.started`.
+/// Check 5 — causation integrity: event ids are unique; every non-null
+/// causation_id references an EARLIER event; roots (null causation) are
+/// `*.created` / `*.started` events or ops-only `state.ops_applied`
+/// maintenance events (permitted by the Part I pairing rule).
 pub fn check_causation(events: &[Event]) -> CheckReport {
     let mut report = CheckReport::new(5, "causation integrity");
     let mut seen: HashSet<&str> = HashSet::new();
@@ -422,21 +553,31 @@ pub fn check_causation(events: &[Event]) -> CheckReport {
                 }
             }
             None => {
-                if !(event.kind.ends_with(".created") || event.kind.ends_with(".started")) {
+                let allowed_root = event.kind.ends_with(".created")
+                    || event.kind.ends_with(".started")
+                    || event.kind == "state.ops_applied";
+                if !allowed_root {
                     report.failures.push(format!(
-                        "line {n}: root event (null causation) has kind `{}`, expected *.created / *.started",
+                        "line {n}: root event (null causation) has kind `{}`, expected *.created / *.started / state.ops_applied",
                         event.kind
                     ));
                 }
             }
         }
-        seen.insert(event.id.as_str());
+        if !seen.insert(event.id.as_str()) {
+            report.failures.push(format!(
+                "line {n}: duplicate event id {} (ids must be unique for the causal order to be well-defined)",
+                event.id.as_str()
+            ));
+        }
     }
     report
 }
 
-/// Check 6 — restore: manifest + identity present, the log folds. With
-/// `fixture_facts`, additionally asserts the Part VI fixture graph.
+/// Check 6 — restore: the manifest and identity are present at their default
+/// locations and the log folds. With `fixture_facts`, additionally asserts the
+/// Part VI fixture graph. (Manifest-declared alternate locations are not yet
+/// mechanically checked.)
 pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> CheckReport {
     let mut report = CheckReport::new(6, "restore");
     if !repo.join("AGENT.md").is_file() {
@@ -444,9 +585,10 @@ pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> Chec
     }
     let identity_ok = repo.join("identity").is_dir() || repo.join("IDENTITY.md").is_file();
     if !identity_ok {
-        report
-            .failures
-            .push("no identity/ directory or IDENTITY.md".into());
+        report.failures.push(
+            "no identity/ directory or IDENTITY.md (manifest-declared alternate locations are not yet checked)"
+                .into(),
+        );
     }
     let graph = match replay(events) {
         Ok(g) => g,
@@ -459,13 +601,13 @@ pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> Chec
         return report;
     }
 
-    let node = |id: &str| graph.get_node(&NodeId::new(id));
+    let node = |id: &str| graph.get_node(&yoagent_state::NodeId::new(id));
     let prop = |id: &str, key: &str| -> Option<Value> {
         node(id).and_then(|n| n.props.get(key)).cloned()
     };
     let edge = |from: &str, rel: &str, to: &str| -> bool {
         graph
-            .outgoing(&NodeId::new(from), Some(rel))
+            .outgoing(&yoagent_state::NodeId::new(from), Some(rel))
             .iter()
             .any(|r| r.to.as_str() == to)
     };
@@ -504,19 +646,22 @@ pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> Chec
 }
 
 /// Check 7 — domain↔ops consistency (the pairing rule): every entity-creating
-/// domain event has a paired ops event (causation = domain id) whose CreateNode
-/// matches the payload's id, kind, and status.
+/// domain event (the PAIRED_KINDS table) is materialized by EXACTLY ONE
+/// `state.ops_applied` event whose causation_id names it and whose CreateNode
+/// matches the payload's id, kind, and status. All claimants are checked —
+/// a decoy pair cannot shadow a contradiction. Ops events must chain to
+/// domain events, never to other ops events.
 pub fn check_pairing(events: &[Event]) -> CheckReport {
     let mut report = CheckReport::new(7, "domain↔ops consistency");
     let paired: HashMap<&str, &str> = PAIRED_KINDS.iter().copied().collect();
     let by_id: HashMap<&str, &Event> = events.iter().map(|e| (e.id.as_str(), e)).collect();
 
-    // ops events indexed by the domain event they claim to apply
-    let mut ops_for: HashMap<&str, &Event> = HashMap::new();
+    // ALL ops events indexed by the domain event they claim to apply
+    let mut ops_for: HashMap<&str, Vec<&Event>> = HashMap::new();
     for event in events {
         if event.kind == "state.ops_applied" {
             if let Some(cause) = &event.causation_id {
-                ops_for.insert(cause.as_str(), event);
+                ops_for.entry(cause.as_str()).or_default().push(event);
             }
         }
     }
@@ -527,59 +672,69 @@ pub fn check_pairing(events: &[Event]) -> CheckReport {
             continue;
         };
         let Some(entity_id) = event.payload.get("id").and_then(Value::as_str) else {
-            report.failures.push(format!(
-                "line {n}: {} payload has no `id`",
-                event.kind
-            ));
+            report
+                .failures
+                .push(format!("line {n}: {} payload has no `id`", event.kind));
             continue;
         };
-        let Some(ops_event) = ops_for.get(event.id.as_str()) else {
+        let claimants = ops_for.get(event.id.as_str()).map(Vec::as_slice).unwrap_or(&[]);
+        if claimants.is_empty() {
             report.failures.push(format!(
                 "line {n}: {} `{entity_id}` has no paired state.ops_applied",
                 event.kind
             ));
             continue;
-        };
-        let Some(ops) = ops_of(ops_event) else {
-            report.failures.push(format!(
-                "line {n}: paired ops event {} has malformed payload",
-                ops_event.id.as_str()
-            ));
-            continue;
-        };
-        let create = ops.iter().find_map(|op| match op {
-            StateOp::CreateNode { id, kind, props } if id.as_str() == entity_id => {
-                Some((kind.clone(), props.clone()))
+        }
+        let mut creators = 0;
+        for ops_event in claimants {
+            let ops = match ops_of(ops_event) {
+                OpsPayload::Ops(ops) => ops,
+                OpsPayload::Malformed(e) => {
+                    report.failures.push(format!(
+                        "line {n}: paired ops event {} has malformed payload: {e}",
+                        ops_event.id.as_str()
+                    ));
+                    continue;
+                }
+                OpsPayload::NotOps => unreachable!("indexed by kind above"),
+            };
+            for op in ops {
+                let StateOp::CreateNode { id, kind, props } = op else {
+                    continue;
+                };
+                if id.as_str() != entity_id {
+                    continue;
+                }
+                creators += 1;
+                if kind != *expected_kind {
+                    report.failures.push(format!(
+                        "line {n}: `{entity_id}` created as kind `{kind}`, domain event implies `{expected_kind}`"
+                    ));
+                }
+                if let (Some(evt_status), Some(node_status)) =
+                    (event.payload.get("status"), props.get("status"))
+                {
+                    if evt_status != node_status {
+                        report.failures.push(format!(
+                            "line {n}: `{entity_id}` status contradicts domain event ({evt_status} vs {node_status})"
+                        ));
+                    }
+                }
             }
-            _ => None,
-        });
-        let Some((kind, props)) = create else {
+        }
+        if creators == 0 {
             report.failures.push(format!(
                 "line {n}: paired ops for {} do not create node `{entity_id}`",
                 event.kind
             ));
-            continue;
-        };
-        if kind != *expected_kind {
+        } else if creators > 1 {
             report.failures.push(format!(
-                "line {n}: `{entity_id}` created as kind `{kind}`, domain event implies `{expected_kind}`"
+                "line {n}: `{entity_id}` created by {creators} ops events (pairing must be exactly one)"
             ));
-        }
-        if let (Some(evt_status), Some(node_status)) =
-            (event.payload.get("status"), props.get("status"))
-        {
-            if evt_status != node_status {
-                report.failures.push(format!(
-                    "line {n}: `{entity_id}` status contradicts domain event ({evt_status} vs {node_status})"
-                ));
-            }
         }
     }
 
-    // The reverse direction: an ops event claiming causation from a paired
-    // domain event must not create a node whose id is that event's entity with
-    // a different kind (contradiction), which the loop above already covers.
-    // Here we only verify claimed causations exist as domain events.
+    // Ops events must chain to domain events, never to other ops events.
     for event in events {
         if event.kind != "state.ops_applied" {
             continue;
@@ -598,20 +753,57 @@ pub fn check_pairing(events: &[Event]) -> CheckReport {
     report
 }
 
-pub fn run_all(repo: &Path, fixture_facts: bool) -> Result<Vec<CheckReport>, String> {
-    let lines = read_log_lines(repo)?;
-    let events = parse_events(&lines)?;
-    Ok(vec![
-        check_envelope(&lines),
-        check_replay(repo, &events, &lines),
-        check_vocabulary(repo, &events),
-        check_append_only(repo),
-        check_causation(&events),
-        check_restore(repo, &events, fixture_facts),
-        check_pairing(&events),
-    ])
+/// Run all seven checks. A missing or unparseable log is a CONFORMANCE
+/// failure (the log is the source of truth), never a tool error — dependent
+/// checks are marked failed rather than silently skipped, and check 4 (which
+/// needs only git) always runs.
+pub fn run_all(repo: &Path, fixture_facts: bool) -> Vec<CheckReport> {
+    let raw = match read_log_raw(repo) {
+        Ok(raw) => raw,
+        Err(e) => {
+            let unavailable = |n: u8, name: &'static str| {
+                CheckReport::failed(n, name, "log unavailable (see check 1)".into())
+            };
+            return vec![
+                CheckReport::failed(1, "envelope round-trip", format!("{EVENTS_PATH}: {e}")),
+                unavailable(2, "replay"),
+                unavailable(3, "vocabulary"),
+                check_append_only(repo),
+                unavailable(5, "causation integrity"),
+                unavailable(6, "restore"),
+                unavailable(7, "domain↔ops consistency"),
+            ];
+        }
+    };
+    let lines = log_lines(&raw);
+    let envelope = check_envelope(&lines);
+    match parse_events(&lines) {
+        Ok(events) => vec![
+            envelope,
+            check_replay(repo, &events, &raw),
+            check_vocabulary(repo, &events),
+            check_append_only(repo),
+            check_causation(&events),
+            check_restore(repo, &events, fixture_facts),
+            check_pairing(&events),
+        ],
+        Err(_) => {
+            let unparsed = |n: u8, name: &'static str| {
+                CheckReport::failed(n, name, "log does not fully parse; see check 1".into())
+            };
+            vec![
+                envelope,
+                unparsed(2, "replay"),
+                unparsed(3, "vocabulary"),
+                check_append_only(repo),
+                unparsed(5, "causation integrity"),
+                unparsed(6, "restore"),
+                unparsed(7, "domain↔ops consistency"),
+            ]
+        }
+    }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
