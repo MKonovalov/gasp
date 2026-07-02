@@ -8,10 +8,10 @@ executor: .agent/config.toml
 ```
 
 The identity hash is SHA-256 over each `identity/` file's relative path followed by a
-newline and its bytes, in sorted path order:
+newline and its bytes, in byte-order-sorted path order:
 
 ```
-for f in $(find identity -type f | sort); do printf '%s\n' "$f"; cat "$f"; done | shasum -a 256
+find identity -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done | shasum -a 256
 ```
 
 An identity change updates `identity/`, this hash, and appends a `decision` event —
