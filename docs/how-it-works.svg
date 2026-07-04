@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560">
+  <defs>
+    <marker id="ab" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="#2563eb"/></marker>
+    <marker id="ag" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="#6b7280"/></marker>
+    <marker id="av" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="#7c3aed"/></marker>
+    <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}.m{font-family:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace}</style>
+  </defs>
+  <rect width="1200" height="560" fill="#ffffff"/>
+  <rect x="40" y="130" width="250" height="200" rx="14" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-dasharray="7,4"/>
+  <text x="165" y="165" font-size="15" font-weight="700" fill="#334155" text-anchor="middle">EXECUTOR</text>
+  <text x="165" y="188" font-size="12.5" fill="#64748b" text-anchor="middle">model + loop + tools</text>
+  <rect x="65" y="210" width="200" height="30" rx="15" fill="#eef2f7"/>
+  <text x="165" y="229" font-size="12" fill="#475569" text-anchor="middle" class="m">any model &#183; any runtime</text>
+  <g font-size="12" fill="#64748b" text-anchor="middle">
+    <text x="165" y="268">holds no durable state</text>
+    <text x="165" y="288" font-weight="600" fill="#334155">swap it freely &#8646;</text>
+  </g>
+  <rect x="400" y="60" width="360" height="340" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="580" y="93" font-size="15" font-weight="700" fill="#1e40af" text-anchor="middle">AGENT REPO (git)</text>
+  <text x="580" y="112" font-size="12" fill="#64748b" text-anchor="middle">this — not the model — is the agent</text>
+  <rect x="422" y="128" width="316" height="44" rx="9" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="438" y="148" font-size="13" font-weight="600" fill="#475569" class="m">identity/</text>
+  <text x="438" y="164" font-size="10.5" fill="#94a3b8">who it is &#183; human-gated</text>
+  <rect x="422" y="180" width="316" height="44" rx="9" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="438" y="200" font-size="13" font-weight="600" fill="#475569" class="m">skills/</text>
+  <text x="438" y="216" font-size="10.5" fill="#94a3b8">what it can do &#183; versioned</text>
+  <rect x="422" y="232" width="316" height="44" rx="9" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="438" y="252" font-size="13" font-weight="600" fill="#1d4ed8" class="m">state/events.jsonl</text>
+  <text x="438" y="268" font-size="10.5" fill="#94a3b8">SOURCE OF TRUTH &#183; append-only</text>
+  <rect x="422" y="284" width="316" height="44" rx="9" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="438" y="304" font-size="13" font-weight="600" fill="#475569" class="m">memory/</text>
+  <text x="438" y="320" font-size="10.5" fill="#94a3b8">distilled facts + synthesis</text>
+  <rect x="422" y="336" width="316" height="44" rx="9" fill="#fcfcfd" stroke="#eceff3" stroke-width="1.5"/>
+  <text x="438" y="356" font-size="13" font-weight="600" fill="#94a3b8" class="m">journal/ &#183; snapshots/</text>
+  <text x="438" y="372" font-size="10.5" fill="#94a3b8">regenerable projections</text>
+  <rect x="880" y="60" width="280" height="340" rx="14" fill="#faf9ff" stroke="#c4b5fd" stroke-width="2"/>
+  <text x="1020" y="93" font-size="15" font-weight="700" fill="#6d28d9" text-anchor="middle">FOLDED GRAPH</text>
+  <text x="1020" y="112" font-size="12" fill="#64748b" text-anchor="middle">queryable lineage &#183; the why</text>
+  <rect x="955" y="139" width="130" height="42" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1020" y="157" font-size="11.5" font-weight="700" fill="#6d28d9" text-anchor="middle" class="m">goal</text>
+  <text x="1020" y="173" font-size="10" fill="#94a3b8" text-anchor="middle">make retry reliable</text>
+  <rect x="945" y="229" width="150" height="42" rx="9" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="1020" y="247" font-size="11.5" font-weight="700" fill="#ffffff" text-anchor="middle" class="m">patch</text>
+  <text x="1020" y="263" font-size="10" fill="#e9d5ff" text-anchor="middle">Promoted</text>
+  <rect x="900" y="329" width="100" height="42" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="950" y="347" font-size="11.5" font-weight="700" fill="#6d28d9" text-anchor="middle" class="m">eval</text>
+  <text x="950" y="363" font-size="10" fill="#94a3b8" text-anchor="middle">Passed</text>
+  <rect x="1040" y="329" width="110" height="42" rx="9" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1095" y="347" font-size="11.5" font-weight="700" fill="#6d28d9" text-anchor="middle" class="m">decision</text>
+  <text x="1095" y="363" font-size="10" fill="#94a3b8" text-anchor="middle">Approved</text>
+  <line x1="1020" y1="229" x2="1020" y2="185" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#av)"/>
+  <text x="1053" y="212" font-size="9.5" fill="#8b5cf6" class="m">advances</text>
+  <line x1="990" y1="271" x2="960" y2="325" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#av)"/>
+  <text x="928" y="300" font-size="9.5" fill="#8b5cf6" class="m">validated_by</text>
+  <line x1="1052" y1="271" x2="1085" y2="325" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#av)"/>
+  <text x="1112" y="300" font-size="9.5" fill="#8b5cf6" class="m">approved_by</text>
+  <path d="M 290,200 L 396,200" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ab)"/>
+  <rect x="300" y="178" width="90" height="16" fill="#ffffff" opacity="0.95"/>
+  <text x="343" y="190" font-size="11" fill="#2563eb" text-anchor="middle" class="m">appends events</text>
+  <path d="M 760,230 L 876,230" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#av)"/>
+  <rect x="775" y="208" width="90" height="16" fill="#ffffff" opacity="0.95"/>
+  <text x="818" y="220" font-size="11" fill="#7c3aed" text-anchor="middle" class="m">fold on load</text>
+  <path d="M 1020,56 C 1020,10 165,10 165,126" fill="none" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#ag)"/>
+  <rect x="530" y="12" width="140" height="18" fill="#ffffff" opacity="0.95"/>
+  <text x="600" y="25" font-size="11.5" fill="#6b7280" text-anchor="middle" class="m">executor reads the view</text>
+  <rect x="40" y="450" width="1120" height="80" rx="14" fill="#f0f7ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <path d="M 580,404 L 580,446" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ab)"/>
+  <text x="70" y="483" font-size="14.5" font-weight="700" fill="#1e40af">RESTORE = clone + replay</text>
+  <text x="70" y="507" font-size="12.5" fill="#475569">git clone &#8594; fold the log &#8594; load identity + skills &#8594; the same agent resumes &#8212; on any machine, any model, any conformant runtime</text>
+  <g class="m" font-size="11" text-anchor="middle">
+    <rect x="1064" y="466" width="0" height="0" fill="none"/>
+    <rect x="1045" y="466" width="0" height="0" fill="none"/>
+    <rect x="946" y="466" width="0" height="0" fill="none"/>
+  </g>
+  <rect x="860" y="475" width="68" height="26" rx="13" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="894.0" y="492" font-size="11.5" fill="#1d4ed8" text-anchor="middle" class="m">laptop</text>
+  <rect x="940" y="475" width="40" height="26" rx="13" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="960.0" y="492" font-size="11.5" fill="#1d4ed8" text-anchor="middle" class="m">CI</text>
+  <rect x="992" y="475" width="103" height="26" rx="13" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="1043.5" y="492" font-size="11.5" fill="#1d4ed8" text-anchor="middle" class="m">any harness</text>
+</svg>
