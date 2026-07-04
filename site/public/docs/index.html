@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs — GASP · The Git Agent State Protocol</title>
+<meta name="description" content="Guides for adopting GASP: restore an agent, wire in an existing agent, implement a conformant runtime, wrap a closed agent, migrate an existing repo, and pass the conformance kit.">
+<meta property="og:title" content="GASP Docs — adopt the Git Agent State Protocol">
+<meta property="og:description" content="Restore, integrate, implement, wrap, migrate — and verify it all with the conformance checker.">
+<meta property="og:url" content="https://gasp.yolog.dev/docs/">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234DA3FF'/%3E%3Crect x='8' y='8' width='8' height='8' rx='2' fill='%23071120'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #0A0B0D; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+  ::selection { background: rgba(77,163,255,0.25); }
+  a.navlink { color:#B7BBC0; text-decoration:none; font-size:14px; font-weight:500; }
+  a.navlink:hover { color:#E8EAED; }
+  a.btn-primary { background:#4DA3FF; color:#071120; text-decoration:none; font-weight:600; }
+  a.btn-primary:hover { background:#6FB6FF; }
+  a.side-link { color:#B7BBC0; text-decoration:none; font-size:14px; padding:7px 12px; border-radius:8px; }
+  a.side-link:hover { background:rgba(255,255,255,0.05); color:#E8EAED; }
+  a.chip-blue { font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; text-decoration:none; border:1px solid rgba(77,163,255,0.35); border-radius:8px; padding:9px 16px; }
+  a.chip-blue:hover { background:rgba(77,163,255,0.1); }
+  a.chip-gray { font-family:'JetBrains Mono', monospace; font-size:13px; color:#B7BBC0; text-decoration:none; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 16px; }
+  a.chip-gray:hover { background:rgba(255,255,255,0.06); }
+  code.k { font-family:'JetBrains Mono', monospace; font-size:13px; }
+  @media (max-width: 900px) {
+    .docs-grid { grid-template-columns: 1fr !important; }
+    aside.docs-side { position:static !important; flex-direction:row !important; flex-wrap:wrap; }
+    aside.docs-side .side-label { width:100%; }
+    .grid3, .grid2 { grid-template-columns: 1fr !important; }
+    nav, footer { padding-left:20px !important; padding-right:20px !important; }
+    h1 { font-size:28px !important; }
+  }
+</style>
+</head>
+<body>
+<div style="min-height:100vh; background:#0A0B0D; color:#E8EAED; font-family:'Instrument Sans', system-ui, sans-serif; -webkit-font-smoothing:antialiased;">
+
+  <!-- NAV -->
+  <nav style="position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; padding:0 40px; height:64px; background:rgba(10,12,11,0.82); backdrop-filter:blur(12px); border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="/" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:#E8EAED;">
+        <div style="width:24px; height:24px; border-radius:6px; background:linear-gradient(135deg, #4DA3FF, #1F6FD1); display:flex; align-items:center; justify-content:center;">
+          <div style="width:8px; height:8px; border-radius:2px; background:#071120;"></div>
+        </div>
+        <span style="font-weight:700; font-size:17px; letter-spacing:0.06em;">GASP</span>
+      </a>
+      <span style="color:#575B60; font-size:14px;">/</span>
+      <span style="font-size:14px; font-weight:600; color:#B7BBC0;">Docs</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px;">
+      <a href="/" class="navlink">Home</a>
+      <a href="#conformance" class="btn-primary" style="font-size:14px; padding:8px 16px; border-radius:8px;">Run the checker</a>
+    </div>
+  </nav>
+
+  <div class="docs-grid" style="max-width:1200px; margin:0 auto; display:grid; grid-template-columns:240px 1fr; gap:56px; padding:48px 40px 120px; align-items:start;">
+
+    <!-- SIDEBAR -->
+    <aside class="docs-side" style="position:sticky; top:96px; display:flex; flex-direction:column; gap:4px;">
+      <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:8px 12px;">GUIDES</div>
+      <a href="#start" class="side-link">Start a new agent</a>
+      <a href="#restore" class="side-link">Restore an agent</a>
+      <a href="#integrate" class="side-link">Wire in your agent</a>
+      <a href="#implement" class="side-link">Implement a runtime</a>
+      <a href="#wrap" class="side-link">Wrap a closed agent</a>
+      <a href="#migrate" class="side-link">Migrate an existing repo</a>
+      <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:16px 12px 8px;">VERIFY</div>
+      <a href="#conformance" class="side-link">Pass conformance</a>
+      <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:16px 12px 8px;">REFERENCE</div>
+      <a href="https://github.com/yologdev/gasp/blob/main/SPEC.md" target="_blank" rel="noopener" class="side-link">SPEC.md — full protocol ↗</a>
+      <a href="https://crates.io/crates/yoagent-state" target="_blank" rel="noopener" class="side-link">yoagent-state (Rust) ↗</a>
+      <a href="https://github.com/yologdev/yoyo-gasp" target="_blank" rel="noopener" class="side-link">yoyo-gasp — living example ↗</a>
+    </aside>
+
+    <!-- CONTENT -->
+    <main style="min-width:0; display:flex; flex-direction:column; gap:72px;">
+
+      <!-- START -->
+      <section id="start">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — 2 MIN</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Start a new agent from zero</h1>
+        <p style="margin:0 0 24px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">The <a href="https://github.com/yologdev/gasp/tree/main/fixture" target="_blank" rel="noopener" style="color:#4DA3FF; text-decoration:none;">fixture</a> in the spec repo is a complete, conformant agent-repo — use it as the template. Empty the log, make the genesis commit, and you have a brand-new agent that passes all seven checks:</p>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 24px; font-family:'JetBrains Mono', monospace; font-size:13.5px; line-height:2; color:#C4C7CC; margin-bottom:24px; overflow-x:auto;">
+          <div><span style="color:#4DA3FF;">$</span> git clone https://github.com/yologdev/gasp</div>
+          <div><span style="color:#4DA3FF;">$</span> cp -r gasp/fixture my-agent && cd my-agent</div>
+          <div><span style="color:#4DA3FF;">$</span> : > state/events.jsonl                <span style="color:#575B60;"># start with an empty log</span></div>
+          <div><span style="color:#4DA3FF;">$</span> git init && git add -A && git commit -m "genesis"</div>
+          <div><span style="color:#4DA3FF;">$</span> (cd ../gasp && cargo run -q -- ../my-agent)   <span style="color:#575B60;"># all 7 checks pass</span></div>
+        </div>
+        <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65; max-width:680px;">Then make it yours: edit <code class="k">identity/IDENTITY.md</code> to define who the agent is — an identity change updates the <code class="k">identity_hash</code> in <code class="k">AGENT.md</code> in the same human-gated commit (the hash recipe is documented inside <code class="k">AGENT.md</code> itself). Replace <code class="k">skills/retry/</code> with your agent's first skill, bind a model in <code class="k">.agent/config.toml</code>, and wire in an executor — the next guide.</p>
+      </section>
+
+      <!-- RESTORE -->
+      <section id="restore" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — 5 MIN</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Restore an agent from a repo URL</h1>
+        <p style="margin:0 0 24px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">Restore is <strong style="color:#E8EAED;">clone + replay</strong>. Any conformant runtime performs the same six steps against any conformant repo.</p>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 24px; font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#C4C7CC; margin-bottom:24px;"><span style="color:#4DA3FF;">$</span> restore &lt;git-url&gt; [--at &lt;event-id&gt;] [--model &lt;model&gt;]</div>
+        <ol style="margin:0; padding-left:22px; display:flex; flex-direction:column; gap:12px; color:#C4C7CC; font-size:15px; line-height:1.65; max-width:680px;">
+          <li><code class="k" style="color:#D8A657;">git clone &lt;url&gt;</code> — optionally a partial clone to skip cold transcripts.</li>
+          <li>Read <code class="k">AGENT.md</code> + <code class="k">.agent/config.toml</code>; verify spec version and identity hash.</li>
+          <li>Load <code class="k">identity/</code> and <code class="k">skills/</code> directly — runtime, never compiled in.</li>
+          <li><strong style="color:#E8EAED;">Fold the committed log into state</strong>, optionally seeded from the latest verified snapshot. This reconstructs open goals, patch lifecycle, lineage.</li>
+          <li>Bind the chosen model/provider as the executor.</li>
+          <li>Resume: take the lease, continue the loop.</li>
+        </ol>
+        <p style="margin:24px 0 0; color:#8A8F94; font-size:14.5px; line-height:1.65; max-width:680px;">"Same agent, everywhere" = the same clone + fold on any machine. Snapshots are an optimization, never an authority — restore verifies each snapshot's integrity record against the cloned log and falls back to a full fold on mismatch.</p>
+      </section>
+
+      <!-- INTEGRATE -->
+      <section id="integrate" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — THE COMMON CASE</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Wire an existing agent into GASP</h1>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">GASP governs state, not your executor. Keep your model, loop, prompts, and tools; route their state through GASP. Three additive steps — closer to adding OpenTelemetry than adopting a framework.</p>
+        <div class="grid3" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:28px;">
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px;">1 — point at a repo</div>
+            <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">On start, clone-or-init the state repo from a URL. One line of config; this is the agent's identity + memory + log.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px;">2 — instrument transitions</div>
+            <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Emit an event at the moments your loop already has: your "task" → <code class="k" style="font-size:12.5px;">task</code>, your test gate → <code class="k" style="font-size:12.5px;">eval</code>, your accepted change → <code class="k" style="font-size:12.5px;">patch</code> + <code class="k" style="font-size:12.5px;">decision</code>.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px;">3 — load / commit</div>
+            <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Fold the log at startup, run your loop, persist at run close. Everything else stays yours.</p>
+          </div>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; overflow:hidden;">
+          <div style="padding:11px 18px; border-bottom:1px solid rgba(255,255,255,0.07); font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0;">a conformant control loop — stateless over the committed log</div>
+          <pre style="margin:0; padding:20px 24px; font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.75; color:#C4C7CC; overflow-x:auto;">take_lease()
+state = fold(state/events.jsonl)        <span style="color:#575B60;"># reconstruct projection from the log</span>
+start_run(goal)                          <span style="color:#575B60;"># append goal / task / run events</span>
+while not run_done:
+    decision = model.next(view(state))   <span style="color:#575B60;"># PURE: state in, decision out</span>
+    if decision.is_tool_call:
+        result = run_tool(decision)      <span style="color:#575B60;"># the gate yields an `eval`</span>
+        append(events_from(result))
+close_run():
+    append(patch / decision)             <span style="color:#575B60;"># promote or revert per executor policy</span>
+    regenerate(journal, active_memory)
+    commit(...) with Run-Id / Outcome trailer
+release_lease()</pre>
+        </div>
+        <div style="margin-top:20px; background:rgba(77,163,255,0.05); border:1px solid rgba(77,163,255,0.22); border-radius:12px; padding:20px 24px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:8px;">writing in Rust?</div>
+          <p style="margin:0; color:#C4C7CC; font-size:14.5px; line-height:1.65;">Don't hand-author the log format. The reference runtime <code class="k">yoagent-state</code> ships paired helpers (<code class="k">record_goal</code>, <code class="k">propose_patch</code>, <code class="k">record_eval</code>, …) that emit each domain event and its <code class="k">state.ops_applied</code> correctly linked, plus <code class="k">GitEventStore</code> — flush-per-event durability, in-append lease, boundary commits with trailers. Repos emitted through it pass all 7 checks.</p>
+        </div>
+      </section>
+
+      <!-- IMPLEMENT -->
+      <section id="implement" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — FROM SCRATCH</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Implement a conformant runtime</h1>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">Any language works — a Python or TS agent implements the layout itself and needs no library. Get these four things right:</p>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The envelope</div>
+            <p style="margin:0 0 14px; color:#8A8F94; font-size:14.5px; line-height:1.65;">One JSON object per line of <code class="k">state/events.jsonl</code>: <code class="k" style="color:#D8A657;">id, schema_version, ts_ms, actor, kind, payload, causation_id, correlation_id</code>. No extra top-level fields, none missing. Physical line order is the authoritative total order — <code class="k">ts_ms</code> is advisory.</p>
+            <pre style="margin:0; padding:14px 16px; background:#0A0B0D; border:1px solid rgba(255,255,255,0.07); border-radius:8px; font-family:'JetBrains Mono', monospace; font-size:12px; line-height:1.7; color:#8A8F94; overflow-x:auto;">{"id":"event_01","schema_version":1,"ts_ms":1739000000000,"actor":{"kind":"agent","id":"evolve"},
+ "kind":"goal.created","payload":{"id":"goal_retry","title":"Make retry reliable", …},
+ "causation_id":null,"correlation_id":"goal_retry"}</pre>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The pairing rule</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">Every entity-creating domain event (<code class="k">goal.created</code>, <code class="k">patch.proposed</code>, <code class="k">eval.finished</code>, …) is followed by exactly one <code class="k">state.ops_applied</code> whose <code class="k">causation_id</code> is the domain event and whose ops create the entity consistently. Only ops events fold into the graph; domain events are the audit layer. This is what keeps the two from silently diverging.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Append-and-flush per event, commit at the run boundary</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">The JSONL append is the durability guarantee — flush each event immediately so a crash loses nothing. The commit is the shipping guarantee — one closing commit per run with a <code class="k">Run-Id / Goal / Outcome</code> trailer. Committing per event destroys history; buffering until commit loses the tail on crash.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The lease inside the append path</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">A single-writer lease (<code class="k">.agent/lease</code>, local-only, gitignored) checked <em>inside</em> the store's append makes concurrent-writer corruption structurally impossible. Multiplayer and A/B use branches, not concurrent writes to one ref.</p>
+          </div>
+        </div>
+        <p style="margin:24px 0 0; color:#8A8F94; font-size:14.5px; line-height:1.65; max-width:680px;">Identity changes are human-gated: one commit that edits <code class="k">identity/</code>, updates the identity hash in <code class="k">AGENT.md</code>, and appends a <code class="k">decision</code> event — all three together, so the manifest never disagrees with <code class="k">identity/</code> at any point in history.</p>
+      </section>
+
+      <!-- WRAP -->
+      <section id="wrap" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — ADAPTERS</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Wrap a closed agent</h1>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">For agents you don't control, the adapter sits outside the loop and translates their output — you never touch their internals. Whatever the agent exposes picks the rung:</p>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:28px;">
+          <div style="display:flex; gap:20px; align-items:baseline; background:#0E0F11; border:1px solid rgba(77,163,255,0.22); border-radius:12px; padding:18px 24px;">
+            <span style="flex:none; font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; width:64px;">rung 1</span>
+            <div><span style="font-weight:600; font-size:15px;">Native hooks / session-store.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">The agent fires callbacks at its own boundaries; emit GASP events in-band. Real-time, highest fidelity, and the only supported surface where hooks are documented.</span></div>
+          </div>
+          <div style="display:flex; gap:20px; align-items:baseline; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 24px;">
+            <span style="flex:none; font-family:'JetBrains Mono', monospace; font-size:13px; color:#D8A657; width:64px;">rung 2</span>
+            <div><span style="font-weight:600; font-size:15px;">Transcript projector.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">The universal fallback — tail the session transcript on disk into <code class="k">state/events.jsonl</code>. Transcript formats are undocumented internals: pin the agent version, expect breakage on upgrade.</span></div>
+          </div>
+          <div style="display:flex; gap:20px; align-items:baseline; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 24px;">
+            <span style="flex:none; font-family:'JetBrains Mono', monospace; font-size:13px; color:#A78BFA; width:64px;">rung 3</span>
+            <div><span style="font-weight:600; font-size:15px;">Model/API proxy.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">Run the agent behind a shim that sees its model calls and tool I/O; emit from there. For when there is neither hook nor transcript.</span></div>
+          </div>
+        </div>
+        <div class="grid2" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px;">
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0; margin-bottom:10px;">projecting raw events</div>
+            <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.65;">Tool invocation → <code class="k" style="font-size:12.5px;">tool_call</code>; its result → <code class="k" style="font-size:12.5px;">observation</code>; each assistant turn → <code class="k" style="font-size:12.5px;">model_call</code>; session start/stop → <code class="k" style="font-size:12.5px;">run.started</code> / <code class="k" style="font-size:12.5px;">run.finished</code>. Maps nearly 1:1, cheap and faithful.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0; margin-bottom:10px;">lifting the semantic spine</div>
+            <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.65;">A passing test command → <code class="k" style="font-size:12.5px;">eval</code>; an accepted edit or commit → <code class="k" style="font-size:12.5px;">patch</code>; the initiating task → <code class="k" style="font-size:12.5px;">goal</code>. Heuristic by nature — you cannot extract decisions the agent never externalized.</p>
+          </div>
+        </div>
+        <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65; max-width:680px;">What this buys: not resumability — a uniform, ownable record across vendors. Run one agent today and another tomorrow, point both adapters at the same repo, and identity, memory, and lineage survive switching harnesses. An adapter is conformant if its emitted log uses only the GASP vocabulary, is appended durably and committed per the rules, and round-trips through restore.</p>
+      </section>
+
+      <!-- MIGRATE -->
+      <section id="migrate" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">GUIDE — MIGRATION</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Migrate an agent with existing history</h1>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">The manifest binds locations — the standard layout is the default, not a straitjacket. <code class="k" style="font-size:14px;">AGENT.md</code> declares where identity and memory actually live, so an adopter with history keeps its layout. Most agents already have GASP-shaped parts; map them:</p>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; gap:0; padding:12px 24px; border-bottom:1px solid rgba(255,255,255,0.07); font-family:'JetBrains Mono', monospace; font-size:11.5px; letter-spacing:0.08em; color:#575B60;">
+            <span>WHAT YOU HAVE TODAY</span><span>GASP HOME</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">Identity / persona / constraints files</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">identity/</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">Learnings / notes-to-self, append-only</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">memory/facts.jsonl → active_memory.md</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">Journals / narrative logs</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">journal/ — now a projection of run events</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">Skills / prompt-library folders</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">skills/ — versioned, one change per commit</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">Session archives / audit branches</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">transcripts/ — cold, prunable</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:14px;">
+            <span style="color:#C4C7CC;">"pass → commit, fail → revert" CI scripts</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF;">the patch → eval → decision lifecycle</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1.1fr 0.9fr; padding:14px 24px; font-size:14px;">
+            <span style="color:#C4C7CC;">(usually nothing)</span><span style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#D8A657;">state/events.jsonl — the core addition</span>
+          </div>
+        </div>
+        <p style="margin:24px 0 0; color:#8A8F94; font-size:14.5px; line-height:1.65; max-width:680px;">The one thing migration adds is the semantic log itself — turning git history into a queryable lineage graph, and making the self-improvement ratchet (patch → eval → decision → promotion) a primitive instead of an ad-hoc commit-or-revert script. The reference agent <code class="k">yoyo-evolve</code> is this exact migration, documented in SPEC Part IV.</p>
+      </section>
+
+      <!-- CONFORMANCE -->
+      <section id="conformance" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">VERIFY</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Pass the conformance kit</h1>
+        <p style="margin:0 0 24px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">A spec is not a standard until "conformant" is verifiable. The checker runs seven checks against any emitted repo and exits non-zero on any failure:</p>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 24px; font-family:'JetBrains Mono', monospace; font-size:13.5px; line-height:2; color:#C4C7CC; margin-bottom:24px; overflow-x:auto;">
+          <div><span style="color:#4DA3FF;">$</span> cargo run -q -- fixture --fixture   <span style="color:#575B60;"># verify the fixture (all 7 checks)</span></div>
+          <div><span style="color:#4DA3FF;">$</span> cargo run -q -- path/to/agent-repo  <span style="color:#575B60;"># verify any emitted repo</span></div>
+        </div>
+        <div class="grid2" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">1 — envelope round-trip</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">Every line parses to the event envelope and re-serializes structurally equal.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">2 — replay</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">Folding succeeds; every snapshot equals the fold of the log prefix its integrity record names.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">3 — vocabulary</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">Every node kind and relation is baseline vocabulary or declared in a pack at <code class="k" style="font-size:12px;">.agent/packs/</code>.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">4 — append-only in git</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">The full history walk: every commit touching an append-only path adds lines at EOF only. This, not a pre-commit hook, is the enforcement.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">5 — causation integrity</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">Ids unique; every causation references an earlier event; roots are creation/start events.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">6 — restore</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">Manifest + identity present, log folds; against the fixture, the fold must reproduce the four asserted graph facts.</p>
+          </div>
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:18px 22px; grid-column:1 / -1;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:6px;">7 — domain ↔ ops consistency</div>
+            <p style="margin:0; color:#8A8F94; font-size:13.5px; line-height:1.6;">The pairing rule, mechanically: every entity-creating domain event is materialized by exactly one paired <code class="k" style="font-size:12px;">state.ops_applied</code> whose CreateNode matches the payload's id, kind, and status.</p>
+          </div>
+        </div>
+        <div style="margin-top:20px; background:rgba(77,163,255,0.05); border:1px solid rgba(77,163,255,0.22); border-radius:12px; padding:20px 24px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; margin-bottom:8px;">the conformance claim</div>
+          <p style="margin:0; color:#C4C7CC; font-size:14.5px; line-height:1.65;">A <strong>runtime</strong> is conformant iff it can restore the fixture and its own emitted repos pass checks 1–5 and 7. An <strong>adapter</strong> is conformant iff its projected repo passes the same checks and round-trips through restore — the same bar, whether events came from a native loop or a wrapped agent's transcript.</p>
+        </div>
+        <div style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
+          <a href="https://github.com/yologdev/yoyo-gasp" target="_blank" rel="noopener" class="chip-blue">see it live: yoyo-gasp — a conformant repo growing autonomously ↗</a>
+          <a href="https://github.com/yologdev/gasp/tree/main/conformance-check" target="_blank" rel="noopener" class="chip-gray">checker source ↗</a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- FOOTER -->
+  <footer style="border-top:1px solid rgba(255,255,255,0.07); padding:36px 40px;">
+    <div style="max-width:1200px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg, #4DA3FF, #1F6FD1);"></div>
+        <span style="font-weight:700; font-size:14px; letter-spacing:0.06em;">GASP</span>
+        <span style="color:#575B60; font-size:13px;">— Git Agent State Protocol</span>
+      </div>
+      <a href="/" style="color:#575B60; text-decoration:none; font-size:13px;">← Back to homepage</a>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
