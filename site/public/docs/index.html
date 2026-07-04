@@ -328,6 +328,23 @@ release_lease()</pre>
             <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">Because each layer is thin on purpose, and none of the others holds the agent's ongoing life. <code class="k" style="font-size:13px;">identity/</code> is who the agent is — static, human-gated. <code class="k" style="font-size:13px;">memory/facts.jsonl</code> is distilled lessons only — the admission criterion <em>forbids</em> it from mirroring history. The folded graph is the episodic layer: open goals, in-flight runs, the patch → eval → decision record. Restore an agent without it and you get a competent stranger to its own projects — right values, right lessons, no idea what it was doing or why. In human terms: identity is personality, skills are abilities, memory is semantic knowledge, and the fold is episodic memory. Memory can stay small precisely <em>because</em> history has its own home.</p>
           </div>
 
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">After a year of running, isn't the fold too big for the model's context?</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">Two different "too big"s. For the <em>machine</em>, a year of events is trivial — on the reference agent's cadence, roughly 36k lines / ~20&nbsp;MB, folded in well under a second, and snapshots make restore O(tail) anyway. For the <em>model</em>, the folded graph never enters context wholesale — the control loop reads <code class="k" style="font-size:13px;">view(state)</code>, a projection: the distilled synthesis, open goals, the current run's frame, plus targeted lineage queries on demand. Closed history doesn't qualify for the view, so a 365-day-old agent and a 3-day-old agent present the <em>same context footprint</em>. What grows with age is the depth of what can be queried — the asset, not the liability. Your episodic memory holds decades; your working memory holds seven things. Recall, not loading.</p>
+          </div>
+
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">How does the agent decide what to recall into context?</div>
+            <p style="margin:0 0 12px; color:#8A8F94; font-size:14.5px; line-height:1.65;">GASP standardizes what's stored and recallable; the recall policy — <code class="k" style="font-size:13px;">view()</code> — is deliberately the executor's. Best practice is four layers, each with a different trigger:</p>
+            <ul style="margin:0 0 12px; padding-left:20px; color:#8A8F94; font-size:14.5px; line-height:1.7;">
+              <li><strong style="color:#C4C7CC;">Standing</strong> — identity + the distilled synthesis, always loaded, defended by an explicit token budget (the admission criterion and the synthesis step exist to protect this layer).</li>
+              <li><strong style="color:#C4C7CC;">Situation-triggered</strong> — at run start, query the graph by status and adjacency: open goals, last run's outcome, failures on the target at hand. For operational state, graph structure beats semantic search.</li>
+              <li><strong style="color:#C4C7CC;">On-demand</strong> — give the model query tools (<code class="k" style="font-size:12.5px;">lineage(goal)</code>, <code class="k" style="font-size:12.5px;">why(patch)</code>) and let it pull when uncertain; each lookup is itself a logged event, so recall is auditable.</li>
+              <li><strong style="color:#C4C7CC;">Negative-space</strong> — before proposing an action, <em>force</em> a structural check for prior rejections on the same target. This one can't be left to the model's initiative: it can't choose to recall a rejection it has no hint exists.</li>
+            </ul>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">And because state is standardized and executors are swappable, recall policy stops being folklore: two executors with different <code class="k" style="font-size:13px;">view()</code> strategies, same repo, A/B'd on branches, judged by their eval outcomes.</p>
+          </div>
+
         </div>
       </section>
 
