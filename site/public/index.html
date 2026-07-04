@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GASP — The Graph Agent State Protocol</title>
+<meta name="description" content="GASP is a git-native standard for portable agent state. An append-only event log folds into a typed graph of goals, patches, evals, and decisions — the repo is the agent.">
+<meta property="og:title" content="GASP — The repo is the agent.">
+<meta property="og:description" content="A git-native standard for portable agent state. Point any conformant runtime at the repo URL and the same agent resumes anywhere, on any model.">
+<meta property="og:url" content="https://gasp.yolog.dev">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234DA3FF'/%3E%3Crect x='8' y='8' width='8' height='8' rx='2' fill='%23071120'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #0A0B0D; }
+  * { box-sizing: border-box; }
+  ::selection { background: rgba(77,163,255,0.25); }
+  @keyframes dashmarch { to { stroke-dashoffset: -16; } }
+  @keyframes blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+  a.navlink { color:#B7BBC0; text-decoration:none; font-size:14px; font-weight:500; }
+  a.navlink:hover { color:#E8EAED; }
+  a.btn-primary { background:#4DA3FF; color:#071120; text-decoration:none; font-weight:600; }
+  a.btn-primary:hover { background:#6FB6FF; }
+  a.btn-ghost { background:rgba(255,255,255,0.05); color:#E8EAED; border:1px solid rgba(255,255,255,0.12); text-decoration:none; font-weight:600; }
+  a.btn-ghost:hover { background:rgba(255,255,255,0.09); }
+  button.dbtn { cursor:pointer; font-family:'Instrument Sans', sans-serif; font-weight:600; font-size:13.5px; color:#E8EAED; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 18px; }
+  button.dbtn:hover { background:rgba(255,255,255,0.1); }
+  button.dbtn-quiet { cursor:pointer; font-family:'Instrument Sans', sans-serif; font-weight:600; font-size:13.5px; color:#8A8F94; background:transparent; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:9px 18px; }
+  button.dbtn-quiet:hover { color:#E8EAED; }
+  a.card-link { text-decoration:none; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; transition:border-color .2s; }
+  a.card-link:hover { border-color:rgba(77,163,255,0.4); }
+  a.chip-blue { font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; text-decoration:none; border:1px solid rgba(77,163,255,0.35); border-radius:8px; padding:9px 16px; }
+  a.chip-blue:hover { background:rgba(77,163,255,0.1); }
+  a.chip-gray { font-family:'JetBrains Mono', monospace; font-size:13px; color:#B7BBC0; text-decoration:none; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 16px; }
+  a.chip-gray:hover { background:rgba(255,255,255,0.06); }
+  @media (max-width: 900px) {
+    .nav-links a.navlink { display:none; }
+    h1 { font-size:44px !important; }
+    h2 { font-size:30px !important; }
+    .grid3, .grid2, .gridE, .gridL { grid-template-columns: 1fr !important; }
+    nav, header, section, footer { padding-left:20px !important; padding-right:20px !important; }
+    .hero-cmd { display:none !important; }
+  }
+</style>
+</head>
+<body>
+<div style="min-height:100vh; background:#0A0B0D; color:#E8EAED; font-family:'Instrument Sans', system-ui, sans-serif; -webkit-font-smoothing:antialiased;">
+
+  <!-- NAV -->
+  <nav style="position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; padding:0 40px; height:64px; background:rgba(10,12,11,0.82); backdrop-filter:blur(12px); border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:24px; height:24px; border-radius:6px; background:linear-gradient(135deg, #4DA3FF, #1F6FD1); display:flex; align-items:center; justify-content:center;">
+          <div style="width:8px; height:8px; border-radius:2px; background:#071120;"></div>
+        </div>
+        <span style="font-weight:700; font-size:17px; letter-spacing:0.06em;">GASP</span>
+      </div>
+      <span style="font-size:12px; color:#8A8F94; font-family:'JetBrains Mono', monospace; padding:3px 8px; border:1px solid rgba(255,255,255,0.1); border-radius:99px;">spec v1</span>
+    </div>
+    <div class="nav-links" style="display:flex; align-items:center; gap:28px;">
+      <a href="#fold" class="navlink">How it works</a>
+      <a href="#contract" class="navlink">Conformance</a>
+      <a href="#layout" class="navlink">Repo layout</a>
+      <a href="#quickstart" class="navlink">Quickstart</a>
+      <a href="https://github.com/yologdev/gasp" target="_blank" rel="noopener" class="navlink">GitHub</a>
+      <a href="https://github.com/yologdev/gasp/blob/main/SPEC.md" target="_blank" rel="noopener" class="btn-primary" style="font-size:14px; padding:8px 16px; border-radius:8px;">Read the spec</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header style="position:relative; overflow:hidden; padding:110px 40px 90px; text-align:center;">
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 50% -10%, rgba(77,163,255,0.13), transparent 70%); pointer-events:none;"></div>
+    <div style="position:relative; max-width:860px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:26px;">
+      <div style="display:inline-flex; align-items:center; gap:8px; font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; border:1px solid rgba(77,163,255,0.3); background:rgba(77,163,255,0.07); padding:6px 14px; border-radius:99px;">
+        <span style="width:6px; height:6px; border-radius:50%; background:#4DA3FF;"></span>
+        Graph Agent State Protocol &#183; status: buildable
+      </div>
+      <h1 style="margin:0; font-size:72px; line-height:1.05; font-weight:700; letter-spacing:-0.03em; text-wrap:balance;">The repo <span style="color:#4DA3FF;">is</span> the agent.</h1>
+      <p style="margin:0; max-width:640px; font-size:19px; line-height:1.6; color:#A9AEB3; text-wrap:pretty;">GASP is a git-native standard for portable agent state. An append-only event log folds into a typed graph of goals, patches, evals, and decisions &mdash; point any conformant runtime at the repo URL and the same agent resumes anywhere, on any model.</p>
+      <div style="display:flex; gap:14px; margin-top:6px;">
+        <a href="https://github.com/yologdev/gasp/blob/main/SPEC.md" target="_blank" rel="noopener" class="btn-primary" style="font-size:15px; padding:13px 26px; border-radius:10px;">Read the spec</a>
+        <a href="#contract" class="btn-ghost" style="font-size:15px; padding:13px 26px; border-radius:10px;">Run the checker</a>
+      </div>
+      <div class="hero-cmd" style="margin-top:18px; display:flex; align-items:center; gap:0; font-family:'JetBrains Mono', monospace; font-size:13.5px; background:#0F1013; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:14px 22px; color:#B7BBC0;">
+        <span style="color:#4DA3FF; margin-right:12px;">$</span>
+        <span>cargo run -q -- fixture --fixture</span>
+        <span style="color:#575B60; margin-left:16px;"># verify the fixture, all 7 checks</span>
+        <span style="display:inline-block; width:8px; height:17px; background:#4DA3FF; margin-left:8px; animation:blink 1.1s step-end infinite;"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PROBLEM -->
+  <section style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">01 &mdash; THE PROBLEM</div>
+      <h2 style="margin:0 0 12px; font-size:38px; font-weight:700; letter-spacing:-0.02em;">Agent state today is trapped</h2>
+      <p style="margin:0 0 40px; max-width:620px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">Swapping models means amnesia &mdash; because the state was never yours to begin with.</p>
+      <div class="grid3" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Transcripts rot in vendor folders</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Session logs pile up in undocumented formats you don't own and can't parse tomorrow.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Memory dies with the runtime</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Identity, skills, and learnings live inside one harness. Switch tools and the agent forgets who it is.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Nothing explains why</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">No lineage from goal to change to test to decision &mdash; just a flat transcript of what happened.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOLD DIAGRAM -->
+  <section id="fold" style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:36px; flex-wrap:wrap;">
+        <div>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">02 &mdash; HOW IT WORKS</div>
+          <h2 style="margin:0; font-size:38px; font-weight:700; letter-spacing:-0.02em;">The log folds into a graph</h2>
+          <p style="margin:12px 0 0; max-width:560px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">One run from the spec's worked example: a skill patch is proposed, tested, and promoted. Domain events record the <em>why</em>; each <code style="font-family:'JetBrains Mono', monospace; font-size:14px; color:#D8A657;">state.ops_applied</code> event folds into the graph.</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="btn-play" class="dbtn">&#10074;&#10074; Pause</button>
+          <button id="btn-step" class="dbtn">Step &rarr;</button>
+          <button id="btn-reset" class="dbtn-quiet">Reset</button>
+        </div>
+      </div>
+
+      <div class="grid2" style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:stretch;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.07);">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0;">state/events.jsonl</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:11.5px; color:#575B60;">append-only &#183; source of truth</span>
+          </div>
+          <div id="log-rows" style="padding:10px 8px; display:flex; flex-direction:column; gap:2px;"></div>
+        </div>
+        <div style="position:relative; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.07);">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0;">folded graph</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:11.5px; color:#575B60;">queryable &#183; regenerable</span>
+          </div>
+          <div id="graph-panel" style="position:relative; height:420px; background-image:radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size:22px 22px;">
+            <svg id="graph-edges" width="100%" height="100%" viewBox="0 0 640 420" style="position:absolute; inset:0;"></svg>
+          </div>
+        </div>
+      </div>
+      <div class="grid3" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-top:20px;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:22px 24px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.1em; margin-bottom:10px;">APPEND</div>
+          <p style="margin:0 0 12px; color:#8A8F94; font-size:14px; line-height:1.6;">Every semantic moment is one JSONL line &mdash; goals, runs, tool calls, evals, decisions.</p>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#B7BBC0; background:rgba(255,255,255,0.04); border-radius:8px; padding:10px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{"kind":"eval.finished","payload":{"status":"Passed"},...}</div>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:22px 24px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.1em; margin-bottom:10px;">FOLD</div>
+          <p style="margin:0 0 12px; color:#8A8F94; font-size:14px; line-height:1.6;">The log folds into a typed graph along the causal spine.</p>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#B7BBC0; background:rgba(255,255,255,0.04); border-radius:8px; padding:10px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">goal &rarr; patch &rarr; eval &rarr; decision &rarr; promotion</div>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:22px 24px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.1em; margin-bottom:10px;">SHIP</div>
+          <p style="margin:0 0 12px; color:#8A8F94; font-size:14px; line-height:1.6;">Git commits it, git ships it. The same agent resumes anywhere.</p>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#B7BBC0; background:rgba(255,255,255,0.04); border-radius:8px; padding:10px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">restore = clone + replay</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TWO MEDIA -->
+  <section style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">03 &mdash; THE MODEL</div>
+      <h2 style="margin:0 0 12px; font-size:38px; font-weight:700; letter-spacing:-0.02em;">One repo, two media</h2>
+      <p style="margin:0 0 40px; max-width:620px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">An agent has an executor and its state. GASP governs only state &mdash; swap the executor freely. Events reference git artifacts; git stores them. Neither duplicates the other.</p>
+      <div class="grid2" style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:32px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#D8A657; margin-bottom:14px;">git owns the concrete <strong>what</strong></div>
+          <p style="margin:0 0 18px; color:#C4C7CC; font-size:15.5px; line-height:1.65;">Code, <code style="font-family:'JetBrains Mono', monospace; font-size:13.5px;">identity/</code>, <code style="font-family:'JetBrains Mono', monospace; font-size:13.5px;">skills/</code>, commits, diffs.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">lossless</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">bisectable</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">shippable</span>
+          </div>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(77,163,255,0.22); border-radius:14px; padding:32px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:14px;">the log owns the semantic <strong>why</strong></div>
+          <p style="margin:0 0 18px; color:#C4C7CC; font-size:15.5px; line-height:1.65;">Typed events &mdash; goals, runs, failures, patches, evals, decisions &mdash; committed at <code style="font-family:'JetBrains Mono', monospace; font-size:13.5px;">state/events.jsonl</code>.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">what it was trying to do</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">why each change exists</span>
+            <span style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#B7BBC0; border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:5px 12px;">what was decided</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px 32px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:11.5px; color:#575B60; margin-bottom:16px; letter-spacing:0.08em;">THE CAUSAL SPINE &mdash; a backbone, not a forced workflow</div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:'JetBrains Mono', monospace; font-size:13px;">
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">goal</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">task</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">run</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">observation</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">failure</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">hypothesis</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">patch</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">eval</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#E8EAED; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 13px;">decision</span><span style="color:#575B60;">&rarr;</span>
+          <span style="color:#071120; background:#4DA3FF; border:1px solid #4DA3FF; border-radius:8px; padding:6px 13px; font-weight:600;">promotion</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONFORMANCE -->
+  <section id="contract" style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">04 &mdash; CONFORMANCE</div>
+      <h2 style="margin:0 0 12px; font-size:38px; font-weight:700; letter-spacing:-0.02em;">Conformance is a test, not a claim</h2>
+      <p style="margin:0 0 40px; max-width:620px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">Five rules, seven mechanical checks, one canonical fixture. Satisfy them and any other conformant runtime can resume your agent &mdash; that is what makes GASP a standard and not an API.</p>
+      <div class="grid3" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:12px;">1</div>
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">State lives in a git repo</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">At the standard layout &mdash; log, identity, skills, projections.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:12px;">2</div>
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The event log is append-only</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Committed, and using the shared event vocabulary.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:12px;">3</div>
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Identity &amp; skills are artifacts</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Committed, loaded at runtime, never compiled in.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:12px;">4</div>
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Restore is clone + replay</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Fold the committed log into state; load identity and skills.</p>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:26px;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:#4DA3FF; margin-bottom:12px;">5</div>
+          <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The executor is swappable</div>
+          <p style="margin:0; color:#8A8F94; font-size:14px; line-height:1.6;">Swapping model or runtime touches <code style="font-family:'JetBrains Mono', monospace; font-size:12.5px;">.agent/config.toml</code>, nothing else.</p>
+        </div>
+        <div style="background:rgba(77,163,255,0.05); border:1px solid rgba(77,163,255,0.22); border-radius:14px; padding:26px; display:flex; flex-direction:column; justify-content:center;">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:8px;">verified mechanically</div>
+          <p style="margin:0; color:#C4C7CC; font-size:14px; line-height:1.6;">The conformance kit runs 7 checks against any emitted repo &mdash; including replay and the pairing rule.</p>
+        </div>
+      </div>
+      <div style="margin-top:20px; background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; overflow:hidden;">
+        <div style="padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.07); font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0;"><span style="color:#4DA3FF;">$</span> conformance-check agent-repo/</div>
+        <div style="padding:20px 26px; font-family:'JetBrains Mono', monospace; font-size:13px; line-height:2.05; color:#C4C7CC;">
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 1 &mdash; envelope round-trip</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 2 &mdash; replay</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 3 &mdash; vocabulary</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 4 &mdash; append-only in git</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 5 &mdash; causation integrity</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 6 &mdash; restore</div>
+          <div><span style="color:#4DA3FF;">[PASS]</span> check 7 &mdash; domain&#8596;ops consistency</div>
+          <div style="color:#4DA3FF; margin-top:6px;">conformant: all checks passed</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPO LAYOUT -->
+  <section id="layout" style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div class="gridL" style="max-width:1080px; margin:0 auto; display:grid; grid-template-columns:0.9fr 1.1fr; gap:48px; align-items:start;">
+      <div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">05 &mdash; REPO LAYOUT</div>
+        <h2 style="margin:0 0 12px; font-size:38px; font-weight:700; letter-spacing:-0.02em;">Four tiers, not two</h2>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">Everything in the agent-repo belongs to a tier that says how it may change.</p>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; gap:14px; align-items:baseline;">
+            <span style="flex:none; width:12px; height:12px; border-radius:3px; background:#4DA3FF; transform:translateY(1px);"></span>
+            <div><span style="font-weight:600; font-size:15px;">First-class, committed.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">The log, identity, skills. Append-only; identity is human-gated.</span></div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:baseline;">
+            <span style="flex:none; width:12px; height:12px; border-radius:3px; background:#D8A657; transform:translateY(1px);"></span>
+            <div><span style="font-weight:600; font-size:15px;">Derived, append-only.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">Distilled facts &mdash; never a history mirror.</span></div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:baseline;">
+            <span style="flex:none; width:12px; height:12px; border-radius:3px; background:#9D8CD9; transform:translateY(1px);"></span>
+            <div><span style="font-weight:600; font-size:15px;">Projections, regenerable.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">Active memory, journal, snapshots. Free to overwrite.</span></div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:baseline;">
+            <span style="flex:none; width:12px; height:12px; border-radius:3px; background:#575B60; transform:translateY(1px);"></span>
+            <div><span style="font-weight:600; font-size:15px;">Cold, prunable.</span> <span style="color:#8A8F94; font-size:14.5px; line-height:1.6;">Raw transcripts. Never the source of truth.</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; overflow:hidden;">
+        <div style="padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.07); font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#B7BBC0;">agent-repo/</div>
+        <div style="padding:18px 22px; font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.9; color:#B7BBC0; overflow-x:auto;">
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="white-space:nowrap;">&#9500;&#9472;&#9472; AGENT.md</span><span style="color:#575B60; white-space:nowrap;">manifest</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#4DA3FF; white-space:nowrap;">&#9500;&#9472;&#9472; identity/</span><span style="color:#575B60; white-space:nowrap;">human-gated constitution</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#4DA3FF; white-space:nowrap;">&#9500;&#9472;&#9472; skills/</span><span style="color:#575B60; white-space:nowrap;">versioned capabilities</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#4DA3FF; white-space:nowrap;">&#9500;&#9472;&#9472; state/events.jsonl</span><span style="color:#4DA3FF; white-space:nowrap;">source of truth</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#D8A657; white-space:nowrap;">&#9500;&#9472;&#9472; memory/facts.jsonl</span><span style="color:#575B60; white-space:nowrap;">distilled facts</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#9D8CD9; white-space:nowrap;">&#9500;&#9472;&#9472; memory/active_memory.md</span><span style="color:#575B60; white-space:nowrap;">synthesis</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#9D8CD9; white-space:nowrap;">&#9500;&#9472;&#9472; journal/</span><span style="color:#575B60; white-space:nowrap;">narrative projection</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#575B60; white-space:nowrap;">&#9500;&#9472;&#9472; transcripts/</span><span style="color:#575B60; white-space:nowrap;">cold archive</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="color:#9D8CD9; white-space:nowrap;">&#9500;&#9472;&#9472; snapshots/</span><span style="color:#575B60; white-space:nowrap;">fast-restore checkpoints</span></div>
+          <div style="display:flex; justify-content:space-between; gap:16px;"><span style="white-space:nowrap;">&#9492;&#9472;&#9472; .agent/config.toml</span><span style="color:#575B60; white-space:nowrap;">executor binding</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROOF -->
+  <section style="padding:80px 40px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">06 &mdash; PROOF</div>
+      <div style="display:flex; align-items:center; gap:16px; margin:0 0 12px;">
+        <img src="./yoyo.png" alt="yoyo, the octopus agent" width="56" height="56" style="width:56px; height:56px; border-radius:14px; background:#FFFFFF; object-fit:cover; border:1px solid rgba(255,255,255,0.14); flex:none;">
+        <h2 style="margin:0; font-size:38px; font-weight:700; letter-spacing:-0.02em;">yoyo lives here</h2>
+      </div>
+      <p style="margin:0 0 40px; max-width:640px; color:#A9AEB3; font-size:16px; line-height:1.6; text-wrap:pretty;">yoyo, a self-evolving agent with 100k+ lines of self-written Rust, keeps its identity, skills, memory, and lineage in a GASP repo &mdash; recording every evolve, skill, and social session since Day 125. Its state repo passes all 7 checks.</p>
+      <div class="gridE" style="display:grid; grid-template-columns:1.2fr 0.8fr; gap:20px; align-items:stretch;">
+        <div style="background:rgba(77,163,255,0.05); border:1px solid rgba(77,163,255,0.22); border-radius:14px; padding:36px; display:flex; flex-direction:column; justify-content:center; gap:24px;">
+          <p style="margin:0; font-size:26px; line-height:1.4; font-weight:600; letter-spacing:-0.01em; text-wrap:balance;">"Clone <span style="color:#4DA3FF;">yoyo-gasp</span> and yoyo wakes up knowing who it is."</p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <a href="https://github.com/yologdev/yoyo-gasp" target="_blank" rel="noopener" class="chip-blue">yoyo-gasp &mdash; the living agent repo &#8599;</a>
+            <a href="https://github.com/yologdev/yoyo-evolve" target="_blank" rel="noopener" class="chip-gray">yoyo-evolve &#8599;</a>
+          </div>
+        </div>
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; padding:30px 32px; display:flex; flex-direction:column; justify-content:center; gap:14px; font-family:'JetBrains Mono', monospace; font-size:14.5px;">
+          <div><span style="color:#E8EAED;">yoagent</span> <span style="color:#575B60;">executes.</span></div>
+          <div><span style="color:#E8EAED;">yoagent-state</span> <span style="color:#575B60;">remembers.</span></div>
+          <div><span style="color:#E8EAED;">yoyo evolve</span> <span style="color:#575B60;">improves.</span></div>
+          <div><span style="color:#4DA3FF;">git</span> <span style="color:#575B60;">ships.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICKSTART / ECOSYSTEM -->
+  <section id="quickstart" style="padding:80px 40px 100px; border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="max-width:1080px; margin:0 auto;">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:12.5px; color:#4DA3FF; margin-bottom:10px; letter-spacing:0.08em;">07 &mdash; ECOSYSTEM</div>
+      <h2 style="margin:0 0 40px; font-size:38px; font-weight:700; letter-spacing:-0.02em;">The ecosystem</h2>
+      <div class="gridE" style="display:grid; grid-template-columns:1.1fr 0.9fr; gap:20px; align-items:stretch;">
+        <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:14px; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:7px; padding:13px 18px; border-bottom:1px solid rgba(255,255,255,0.07);">
+            <span style="width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,0.14);"></span>
+            <span style="width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,0.14);"></span>
+            <span style="width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,0.14);"></span>
+          </div>
+          <div style="padding:24px 26px; font-family:'JetBrains Mono', monospace; font-size:13.5px; line-height:2.1; color:#C4C7CC; overflow-x:auto;">
+            <div style="white-space:nowrap;"><span style="color:#4DA3FF;">$</span> cargo run -q -- fixture --fixture   <span style="color:#575B60;"># verify the fixture</span></div>
+            <div style="white-space:nowrap;"><span style="color:#4DA3FF;">$</span> cargo run -q -- path/to/agent-repo  <span style="color:#575B60;"># verify any repo</span></div>
+            <div style="white-space:nowrap;"><span style="color:#4DA3FF;">$</span> cargo test                          <span style="color:#575B60;"># kit self-tests</span></div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <a href="https://github.com/yologdev/gasp/blob/main/SPEC.md" target="_blank" rel="noopener" class="card-link" style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:4px; padding:18px 24px;">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#4DA3FF;">SPEC.md &#8599;</span>
+            <span style="color:#8A8F94; font-size:13.5px;">The normative protocol &mdash; Part I.</span>
+          </a>
+          <a href="https://github.com/yologdev/gasp/tree/main/conformance-check" target="_blank" rel="noopener" class="card-link" style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:4px; padding:18px 24px;">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#4DA3FF;">conformance-check &#8599;</span>
+            <span style="color:#8A8F94; font-size:13.5px;">Fixture + 7-check CLI, in this repo.</span>
+          </a>
+          <a href="https://crates.io/crates/yoagent-state" target="_blank" rel="noopener" class="card-link" style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:4px; padding:18px 24px;">
+            <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#4DA3FF;">yoagent-state &#8599;</span>
+            <span style="color:#8A8F94; font-size:13.5px;">Reference runtime, Rust &mdash; GitEventStore, lineage, replay, fork.</span>
+          </a>
+        </div>
+      </div>
+      <div class="grid3" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:14px;">
+        <a href="https://github.com/yologdev/yoyo-gasp" target="_blank" rel="noopener" class="card-link" style="display:flex; flex-direction:column; gap:4px; padding:18px 24px;">
+          <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#4DA3FF;">yoyo-gasp &#8599;</span>
+          <span style="color:#8A8F94; font-size:13.5px;">The first living agent repo.</span>
+        </a>
+        <div style="display:flex; flex-direction:column; gap:4px; background:#0E0F11; border:1px dashed rgba(255,255,255,0.12); border-radius:14px; padding:18px 24px;">
+          <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#8A8F94;">adapters</span>
+          <span style="color:#575B60; font-size:13.5px;">Claude Code, Codex &mdash; spec'd, coming.</span>
+        </div>
+        <a href="https://github.com/yologdev/gasp" target="_blank" rel="noopener" class="card-link" style="display:flex; flex-direction:column; gap:4px; padding:18px 24px;">
+          <span style="font-family:'JetBrains Mono', monospace; font-size:13.5px; color:#4DA3FF;">github.com/yologdev/gasp &#8599;</span>
+          <span style="color:#8A8F94; font-size:13.5px;">Spec, fixture, checker &mdash; everything in one repo.</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="border-top:1px solid rgba(255,255,255,0.07); padding:36px 40px;">
+    <div style="max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg, #4DA3FF, #1F6FD1);"></div>
+        <span style="font-weight:700; font-size:14px; letter-spacing:0.06em;">GASP</span>
+        <span style="color:#575B60; font-size:13px;">&mdash; Graph Agent State Protocol</span>
+      </div>
+      <p style="margin:0; color:#575B60; font-size:13px; max-width:640px;">MIT licensed. The "log is the agent" idea descends from <a href="https://github.com/yoheinakajima/activegraph" target="_blank" rel="noopener" style="color:#8A8F94;">Yohei Nakajima's ActiveGraph</a>; yoagent-state is an independent Rust implementation, and GASP binds it to git as the interchange substrate.</p>
+    </div>
+  </footer>
+</div>
+<script>
+(function () {
+  var EVENTS = [
+    { kind: "goal.created",      detail: '"Make retry reliable"',               ops: false },
+    { kind: "state.ops_applied", detail: "CreateNode goal_retry",               ops: true  },
+    { kind: "run.started",       detail: 'run_42 "fix retry skill"',            ops: false },
+    { kind: "patch.proposed",    detail: '"persist retry counter"',             ops: false },
+    { kind: "state.ops_applied", detail: "CreateNode patch_9 + advances",       ops: true  },
+    { kind: "tool.called",       detail: "cargo test retry \u2014 ok, 1 passed",  ops: false },
+    { kind: "eval.finished",     detail: "eval_5 Passed \u00b7 score 1.0",        ops: false },
+    { kind: "state.ops_applied", detail: "CreateNode eval_5 + validated_by",    ops: true  },
+    { kind: "decision.created",  detail: 'decision_3 Approved \u2014 "promote"',  ops: false },
+    { kind: "state.ops_applied", detail: "decision_3 + approved_by \u2192 Promoted", ops: true }
+  ];
+  var NODES = [
+    { key: "goal",     kind: "GOAL",     title: "Make retry reliable",   x: 320, y: 70,  at: 2  },
+    { key: "patch",    kind: "PATCH",    title: "persist retry counter", x: 320, y: 210, at: 5  },
+    { key: "eval",     kind: "EVAL",     title: "cargo test \u2014 Passed", x: 155, y: 340, at: 8  },
+    { key: "decision", kind: "DECISION", title: "Approved",              x: 490, y: 340, at: 10 }
+  ];
+  var EDGES = [
+    { x1: 320, y1: 182, x2: 320, y2: 100, lx: 356, ly: 145, label: "advances",     at: 5  },
+    { x1: 280, y1: 238, x2: 185, y2: 312, lx: 200, ly: 268, label: "validated_by", at: 8  },
+    { x1: 360, y1: 238, x2: 455, y2: 312, lx: 442, ly: 268, label: "approved_by",  at: 10 }
+  ];
+  var MONO = "'JetBrains Mono', monospace";
+  var step = 0, playing = true, timer = null;
+  var logRows = [], nodeEls = [], badge = null, edgeEls = [];
+
+  var logC = document.getElementById("log-rows");
+  EVENTS.forEach(function (e, i) {
+    var row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:12px;font-family:" + MONO + ";font-size:12px;padding:7px 12px;border-radius:8px;border:1px solid transparent;transition:all 0.35s ease;";
+    var num = document.createElement("span");
+    num.style.cssText = "width:22px;flex:none;text-align:right;color:#575B60;font-size:11px;";
+    num.textContent = String(i + 1).padStart(2, "0");
+    var kind = document.createElement("span");
+    kind.style.cssText = "flex:none;font-weight:500;color:" + (e.ops ? "#4DA3FF" : (e.kind === "tool.called" ? "#D8A657" : "#B7BBC0")) + ";";
+    kind.textContent = e.kind;
+    var det = document.createElement("span");
+    det.style.cssText = "flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#8A8F94;";
+    det.textContent = e.detail;
+    row.appendChild(num); row.appendChild(kind); row.appendChild(det);
+    var tag = null;
+    if (e.ops) {
+      tag = document.createElement("span");
+      tag.style.cssText = "flex:none;font-size:10.5px;color:#575B60;";
+      tag.textContent = "\u2192 graph";
+      row.appendChild(tag);
+    }
+    logC.appendChild(row);
+    logRows.push({ row: row, tag: tag });
+  });
+
+  var panel = document.getElementById("graph-panel");
+  NODES.forEach(function (n) {
+    var d = document.createElement("div");
+    d.style.cssText = "position:absolute;left:" + (n.x / 640 * 100) + "%;top:" + (n.y / 420 * 100) + "%;transform:translate(-50%,-42%);opacity:0;transition:opacity 0.45s ease, transform 0.45s ease, border-color 0.45s ease;background:#121418;border:1px solid rgba(255,255,255,0.16);border-radius:12px;padding:10px 18px;color:#E8EAED;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.45);";
+    var k = document.createElement("div");
+    k.style.cssText = "font-family:" + MONO + ";font-size:10.5px;letter-spacing:0.08em;opacity:0.75;";
+    k.textContent = n.kind;
+    var t = document.createElement("div");
+    t.style.cssText = "font-weight:600;font-size:14px;margin-top:2px;";
+    t.textContent = n.title;
+    d.appendChild(k); d.appendChild(t);
+    if (n.key === "patch") {
+      badge = document.createElement("div");
+      badge.style.cssText = "position:absolute;top:-11px;right:-10px;background:#4DA3FF;color:#071120;font-family:" + MONO + ";font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:99px;display:none;";
+      badge.textContent = "Promoted";
+      d.appendChild(badge);
+    }
+    panel.appendChild(d);
+    nodeEls.push({ el: d, at: n.at, key: n.key });
+  });
+
+  var svg = document.getElementById("graph-edges");
+  var NS = "http://www.w3.org/2000/svg";
+  EDGES.forEach(function (e) {
+    var g = document.createElementNS(NS, "g");
+    g.style.opacity = "0"; g.style.transition = "opacity 0.5s ease";
+    var l = document.createElementNS(NS, "line");
+    l.setAttribute("x1", e.x1); l.setAttribute("y1", e.y1);
+    l.setAttribute("x2", e.x2); l.setAttribute("y2", e.y2);
+    l.setAttribute("stroke", "#4DA3FF"); l.setAttribute("stroke-width", "1.5");
+    l.setAttribute("stroke-dasharray", "5 4");
+    l.style.animation = "dashmarch 1s linear infinite";
+    var t = document.createElementNS(NS, "text");
+    t.setAttribute("x", e.lx); t.setAttribute("y", e.ly);
+    t.setAttribute("fill", "#6E93BE"); t.setAttribute("font-size", "11.5");
+    t.setAttribute("font-family", "JetBrains Mono, monospace"); t.setAttribute("text-anchor", "middle");
+    t.textContent = e.label;
+    g.appendChild(l); g.appendChild(t); svg.appendChild(g);
+    edgeEls.push({ el: g, at: e.at });
+  });
+
+  function render() {
+    logRows.forEach(function (r, i) {
+      var idx = i + 1, active = step === idx, done = step > idx;
+      r.row.style.background = active ? "rgba(77,163,255,0.1)" : "transparent";
+      r.row.style.borderColor = active ? "rgba(77,163,255,0.35)" : "transparent";
+      r.row.style.opacity = (done || active) ? "1" : "0.32";
+      if (r.tag) {
+        r.tag.textContent = (done || active) ? "folded \u2713" : "\u2192 graph";
+        r.tag.style.color = (done || active) ? "#4DA3FF" : "#575B60";
+      }
+    });
+    nodeEls.forEach(function (n) {
+      var on = step >= n.at;
+      n.el.style.opacity = on ? "1" : "0";
+      n.el.style.transform = on ? "translate(-50%,-50%)" : "translate(-50%,-42%)";
+      if (n.key === "patch") {
+        var promoted = step >= 10;
+        n.el.style.borderColor = promoted ? "#4DA3FF" : "rgba(255,255,255,0.16)";
+        badge.style.display = promoted ? "block" : "none";
+      }
+    });
+    edgeEls.forEach(function (e) { e.el.style.opacity = step >= e.at ? "1" : "0"; });
+    document.getElementById("btn-play").innerHTML = playing ? "&#10074;&#10074; Pause" : "&#9654; Play";
+  }
+
+  function tick() { if (playing) { step = step >= 12 ? 0 : step + 1; render(); } }
+  timer = setInterval(tick, 1100);
+
+  document.getElementById("btn-play").addEventListener("click", function () { playing = !playing; render(); });
+  document.getElementById("btn-step").addEventListener("click", function () { playing = false; step = step >= 12 ? 0 : step + 1; render(); });
+  document.getElementById("btn-reset").addEventListener("click", function () { playing = false; step = 0; render(); });
+  render();
+})();
+</script>
+</body>
+</html>
