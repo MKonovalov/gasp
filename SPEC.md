@@ -156,7 +156,7 @@ The boundary: the **eval and decision facts live in the log** (part of GASP); th
 ## Restore contract
 
 ```
-restore <git-url> [--at <event-id>] [--model <model>]
+gasp restore <git-url> [--at <event-id>] [--model <model>]
 ```
 
 1. `git clone <url>` (optionally a partial clone to skip cold transcripts).
