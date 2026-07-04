@@ -73,6 +73,8 @@
       <a href="#migrate" class="side-link">Migrate an existing repo</a>
       <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:16px 12px 8px;">VERIFY</div>
       <a href="#conformance" class="side-link">Pass conformance</a>
+      <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:16px 12px 8px;">FAQ</div>
+      <a href="#faq" class="side-link">Questions &amp; answers</a>
       <div class="side-label" style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.1em; color:#575B60; padding:16px 12px 8px;">REFERENCE</div>
       <a href="https://github.com/yologdev/gasp/blob/main/SPEC.md" target="_blank" rel="noopener" class="side-link">SPEC.md — full protocol ↗</a>
       <a href="https://crates.io/crates/yoagent-state" target="_blank" rel="noopener" class="side-link">yoagent-state (Rust) ↗</a>
@@ -296,6 +298,36 @@ release_lease()</pre>
         <div style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
           <a href="https://github.com/yologdev/yoyo-gasp" target="_blank" rel="noopener" class="chip-blue">see it live: yoyo-gasp — a conformant repo growing autonomously ↗</a>
           <a href="https://github.com/yologdev/gasp/tree/main/conformance-check" target="_blank" rel="noopener" class="chip-gray">checker source ↗</a>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section id="faq" style="border-top:1px solid rgba(255,255,255,0.07); padding-top:56px;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#4DA3FF; letter-spacing:0.08em; margin-bottom:10px;">FAQ</div>
+        <h1 style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Questions people actually asked</h1>
+        <p style="margin:0 0 28px; color:#A9AEB3; font-size:16px; line-height:1.65; max-width:640px; text-wrap:pretty;">The conceptual questions that come up when meeting GASP for the first time.</p>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Is <code class="k" style="color:#D8A657;">gasp restore</code> related to <code class="k">git restore</code>?</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">No — a name collision only. <code class="k">git restore</code> restores <em>files in a working tree</em> (it discards local edits). <code class="k">gasp restore</code> rebuilds a whole <em>agent</em> from its repo URL: clone, load identity and skills, fold the log, resume. Same English word, unrelated operations.</p>
+          </div>
+
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Why replay the whole log — isn't the current state enough?</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">The current state <em>is</em> the replay's result — GASP just refuses to store it as an authority. A deterministic fold of the same lines yields the same agent on any machine; a stored "current state" would make one copy the truth and the log decoration. And the closed history in the folded graph is load-bearing, not archival: a patch rejected last week stops the agent from blindly proposing it again, every memory fact's <code class="k" style="font-size:13px;">derived_from</code> stays checkable against the runs that taught it, and "why does the agent behave this way" is a walk over closed lineage — open goals alone can't answer it. Keep only the open items and you have a to-do list, not an agent with a past.</p>
+          </div>
+
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">Are snapshots for restoring historical states?</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">No — a snapshot is a cache for reaching <em>now</em> faster. Restore verifies its integrity record (a hash of the exact log prefix it folds through) and then folds only the tail; on any mismatch it falls back to a full fold. Deleting every snapshot loses nothing, ever. Viewing a <em>past</em> state is the separate feature: <code class="k" style="color:#D8A657;">--at &lt;event-id&gt;</code> deliberately stops the fold partway — the agent exactly as it was at that moment, for debugging, audit, or forking from before a bad decision.</p>
+          </div>
+
+          <div style="background:#0E0F11; border:1px solid rgba(255,255,255,0.09); border-radius:12px; padding:22px 26px;">
+            <div style="font-weight:600; font-size:16px; margin-bottom:8px;">The repo already has <code class="k">identity/</code> and <code class="k">memory/</code> — why fold state at all?</div>
+            <p style="margin:0; color:#8A8F94; font-size:14.5px; line-height:1.65;">Because each layer is thin on purpose, and none of the others holds the agent's ongoing life. <code class="k" style="font-size:13px;">identity/</code> is who the agent is — static, human-gated. <code class="k" style="font-size:13px;">memory/facts.jsonl</code> is distilled lessons only — the admission criterion <em>forbids</em> it from mirroring history. The folded graph is the episodic layer: open goals, in-flight runs, the patch → eval → decision record. Restore an agent without it and you get a competent stranger to its own projects — right values, right lessons, no idea what it was doing or why. In human terms: identity is personality, skills are abilities, memory is semantic knowledge, and the fold is episodic memory. Memory can stay small precisely <em>because</em> history has its own home.</p>
+          </div>
+
         </div>
       </section>
 
