@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.png" alt="GASP — The Graph Agent State Protocol" width="100%"/>
+<img src="docs/banner.png" alt="GASP — The Git Agent State Protocol" width="100%"/>
 
 **A git-native standard for portable agent state.**
 

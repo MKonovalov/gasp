@@ -1,6 +1,6 @@
-# GASP — The Graph Agent State Protocol
+# GASP — The Git Agent State Protocol
 
-**GASP** (Graph Agent State Protocol) is a git-native standard for portable agent state. Throughout this document, "GASP" and "the protocol" both refer to the normative standard defined in Part I. The name states the shape: an agent's append-only event log folds into a typed **graph** of goals, patches, evals, and decisions, and that graph, not a flat transcript, is what makes it agent state.
+**GASP** (Git Agent State Protocol) is a standard for portable agent state, native to git. Throughout this document, "GASP" and "the protocol" both refer to the normative standard defined in Part I. The name states the substrate: an agent's durable state lives in a **git** repository — an append-only event log that folds into a typed graph of goals, patches, evals, and decisions, and that graph, not a flat transcript, is what makes it agent state.
 
 **Status:** buildable.
 **Part I** is the normative protocol — no yoyo, no library, no language. **Part II** is the reference runtime (`yoagent-state`, Rust). **Part III** is the reference adapters for wrapping closed agents (Claude Code, Codex, and any other). **Part IV** is the reference agent (yoyo). **Part V** is honest caveats. **Part VI** is the conformance kit (fixture + checker).

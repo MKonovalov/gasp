@@ -4,7 +4,7 @@ Paste this into claude.ai/design as the prompt.
 
 ---
 
-Design a homepage for **GASP — the Graph Agent State Protocol** (github.com/yologdev/gasp), a git-native open standard for portable AI agent state.
+Design a homepage for **GASP — the Git Agent State Protocol** (github.com/yologdev/gasp), a git-native open standard for portable AI agent state.
 
 ## The one idea (hero)
 
