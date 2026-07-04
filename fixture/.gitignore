@@ -1,0 +1,3 @@
+# local-only coordination state (SPEC: never committed)
+.agent/lease
+.agent/HEAD
