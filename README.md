@@ -121,6 +121,10 @@ This is yoyo's actual `state/events.jsonl`, folded and rendered:
 
 <img src="docs/yoyo-gasp-lineage.png" alt="yoyo's real event log folded into its goal/patch/eval/decision graph" width="100%"/>
 
+## Extensions
+
+- **[Permanence](extensions/PERMANENCE.md)** (draft) — durable, retrievable, owned agent state beyond any single host: encrypted payloads on Arweave (pay-once, ~$0.05), P2P redundancy via Radicle, and free Bitcoin-anchored provenance via OpenTimestamps. Optional; core conformance does not require it. Open thinking — feedback welcome.
+
 ## Ecosystem
 
 | Repo | Role |
