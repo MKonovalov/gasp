@@ -84,7 +84,7 @@ This converts digital immortality into a **key-survival problem**, which is the 
 
 A consequence worth stating plainly: **crypto-shredding (destroying the key) is the only available "delete."** Once ciphertext is on Arweave it is there forever; the sole way to make it unrecoverable is to ensure the key no longer exists. Right-to-be-forgotten is therefore all-or-nothing per key, and per-item deletion is impossible. Design key scopes with that in mind.
 
-**Public agents may skip encryption entirely.** "Owned" means the holder decides, and a deliberately transparent agent (yoyo is one: its state is already public) can store plaintext. For such agents the key-survival problem vanishes, at the price of a one-way door: public-permanent can never be retracted, so the upload step needs a redaction check before, not regret after.
+**Public agents may skip encryption entirely.** "Owned" means the holder decides, and a deliberately transparent agent (arc is one: its state is already public) can store plaintext. For such agents the key-survival problem vanishes, at the price of a one-way door: public-permanent can never be retracted, so the upload step needs a redaction check before, not regret after.
 
 ## 7. The permanence record (retrievability manifest)
 

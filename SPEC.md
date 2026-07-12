@@ -3,7 +3,7 @@
 **GASP** (Git Agent State Protocol) is a standard for portable agent state, native to git. Throughout this document, "GASP" and "the protocol" both refer to the normative standard defined in Part I. The name states the substrate: an agent's durable state lives in a **git** repository — an append-only event log that folds into a typed graph of goals, patches, evals, and decisions, and that graph, not a flat transcript, is what makes it agent state.
 
 **Status:** buildable.
-**Part I** is the normative protocol — no yoyo, no library, no language. **Part II** is the reference runtime (`yoagent-state`, Rust). **Part III** is the reference adapters for wrapping closed agents (Claude Code, Codex, and any other). **Part IV** is the reference agent (yoyo). **Part V** is honest caveats. **Part VI** is the conformance kit (fixture + checker).
+**Part I** is the normative protocol — no arc, no library, no language. **Part II** is the reference runtime (`yoagent-state`, Rust). **Part III** is the reference adapters for wrapping closed agents (Claude Code, Codex, and any other). **Part IV** is the reference agent (arc). **Part V** is honest caveats. **Part VI** is the conformance kit (fixture + checker).
 
 The one-sentence idea: **an agent is stateless; its durable state is an append-only event log that folds into a queryable graph, committed into a git repo, and that repo — not the model or the runtime — is the agent.** Point any GASP-conformant runtime at the repo URL and the same agent resumes anywhere, on any model.
 
@@ -313,31 +313,31 @@ The contract, not a per-agent special case. Whatever the agent exposes picks the
 
 ---
 
-# Part IV — Reference agent: yoyo (first adopter)
+# Part IV — Reference agent: arc (first adopter)
 
-yoyo is the proof GASP works end to end. It is one agent; GASP is agent-agnostic. Its own motto is the layering:
+arc is the proof GASP works end to end. It is one agent; GASP is agent-agnostic. Its own motto is the layering:
 
 ```
-yoagent executes.   yoagent-state remembers.   yoyo evolve improves.   git ships.
+yoagent executes.   yoagent-state remembers.   arc evolve improves.   git ships.
 ```
 
-Today `yoyo-evolve` depends on `yoagent` (the executor) but **not yet on `yoagent-state`** — the wiring below is the integration to build, not a description of what exists. The mapping (verified against the public repo, July 2026):
+Today `arc-evolve` depends on `yoagent` (the executor) but **not yet on `yoagent-state`** — the wiring below is the integration to build, not a description of what exists. The mapping (verified against the public repo, July 2026):
 
-| yoyo today | GASP home | Notes |
+| arc today | GASP home | Notes |
 |---|---|---|
 | `IDENTITY.md` / `PERSONALITY.md` (top-level, gate-protected) | `identity/` | The 🐙 persona; `evolve.sh`'s protected-file gate is the "immutable-by-policy" enforcement |
 | `ECONOMICS.md` (top-level) | `identity/PRINCIPLES.md` | Operating constraints |
-| `scripts/yoyo_context.sh` (identity loaded at runtime) | restore step 3 | "Identity is runtime, never `include_str!`" = conformance rule 3 |
-| `memory/learnings.jsonl` → `memory/active_learnings.md` | `memory/facts.jsonl` → `active_memory.md` | Append-only-raw → regenerated-view; yoyo already honors the admission criterion — learnings, not history |
+| `scripts/arc_context.sh` (identity loaded at runtime) | restore step 3 | "Identity is runtime, never `include_str!`" = conformance rule 3 |
+| `memory/learnings.jsonl` → `memory/active_learnings.md` | `memory/facts.jsonl` → `active_memory.md` | Append-only-raw → regenerated-view; arc already honors the admission criterion — learnings, not history |
 | `journals/` (+ `dreams/`) | `journal/` projection | Now a projection of `run` events |
 | `skills/` + `skills_attic/` (top-level, auto-scanned) | `skills/` | Already the right shape; the attic is retired versions |
 | audit-log branch + session tags | `transcripts/` cold store | Session evidence already lives out of the hot path — a branch instead of a directory |
 | GH Actions: `evolve.yml` → `evolve.sh`: assess → plan → ≤3 tasks → `cargo build`+`cargo test` + evaluator gate → pass=commit, fail=`git reset --hard` + auto-filed issue | the control loop + patch/eval/decision | "pass→commit, fail→revert" *is* the patch lifecycle |
 | (no semantic log / lineage today) | `state/events.jsonl` via yoagent-state | The core addition: lineage, replay, fork, version scoring |
 
-Because yoyo's existing layout predates GASP, `AGENT.md` declares where identity and memory actually live (the manifest binds locations; the layout above is the default, not a straitjacket for adopters with history). The one thing yoyo gains is the semantic log itself — turning git history into a queryable lineage graph and making the self-improvement ratchet a primitive rather than an ad-hoc commit-or-revert script.
+Because arc's existing layout predates GASP, `AGENT.md` declares where identity and memory actually live (the manifest binds locations; the layout above is the default, not a straitjacket for adopters with history). The one thing arc gains is the semantic log itself — turning git history into a queryable lineage graph and making the self-improvement ratchet a primitive rather than an ad-hoc commit-or-revert script.
 
-**Skill evolution maps onto the Part I self-improvement pattern directly.** yoyo's skill-evolve cycle (one `refine | create | retire` change per cycle, one commit per change) is the canonical case: each cycle is a `run` under a standing `goal` (`goal_skill_quality`), a completed change is a `patch` pinning the skill commit as its artifact, the harness gate (diff-scope hard rules + build/test) is the **oracle** producing the `eval`, and the keep/revert verdict is the `decision`. A *retirement* is a patch like any other — the commit it pins is the move into the attic; `refused`/`NO-OP` cycles close their run with that outcome and no patch. Two boundaries hold: (1) **skill changes never enter `memory/facts.jsonl`** — they are history, fully derivable from the patch spine, and the Memory admission criterion excludes them; a *distilled insight* behind a change may become a fact later, written by the agent's own synthesis with `derived_from` pointing at these events. (2) **Mirror-on-change keeps conformance rule 3 honest during the two-repo interim**: while the executor still carries its own live skill tree, every promoted skill change is mirrored into the state repo's `skills/` (rebound to the state layout's paths) and rides the *same boundary commit* as its events — so a restored agent gets current skills, and each skill version ships with its lineage. The same session-end mirror keeps the memory streams current: new learnings convert to the fact envelope (`derived_from` naming the run that taught them) and append to `facts.jsonl`; journal entries append (the state copy honors check 4 even though the executor prepends); regenerable projections (active syntheses, dream arc, day counter) are overwritten. The end-state (the executor loading skills and memory from the state repo, retiring the mirrors) remains the migration target.
+**Skill evolution maps onto the Part I self-improvement pattern directly.** arc's skill-evolve cycle (one `refine | create | retire` change per cycle, one commit per change) is the canonical case: each cycle is a `run` under a standing `goal` (`goal_skill_quality`), a completed change is a `patch` pinning the skill commit as its artifact, the harness gate (diff-scope hard rules + build/test) is the **oracle** producing the `eval`, and the keep/revert verdict is the `decision`. A *retirement* is a patch like any other — the commit it pins is the move into the attic; `refused`/`NO-OP` cycles close their run with that outcome and no patch. Two boundaries hold: (1) **skill changes never enter `memory/facts.jsonl`** — they are history, fully derivable from the patch spine, and the Memory admission criterion excludes them; a *distilled insight* behind a change may become a fact later, written by the agent's own synthesis with `derived_from` pointing at these events. (2) **Mirror-on-change keeps conformance rule 3 honest during the two-repo interim**: while the executor still carries its own live skill tree, every promoted skill change is mirrored into the state repo's `skills/` (rebound to the state layout's paths) and rides the *same boundary commit* as its events — so a restored agent gets current skills, and each skill version ships with its lineage. The same session-end mirror keeps the memory streams current: new learnings convert to the fact envelope (`derived_from` naming the run that taught them) and append to `facts.jsonl`; journal entries append (the state copy honors check 4 even though the executor prepends); regenerable projections (active syntheses, dream arc, day counter) are overwritten. The end-state (the executor loading skills and memory from the state repo, retiring the mirrors) remains the migration target.
 
 ---
 

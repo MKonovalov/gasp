@@ -4,9 +4,9 @@
 
 **A git-native standard for portable agent state.**
 
-[Website](https://gasp.yolog.dev) · [Specification](SPEC.md) · [Reference Runtime](https://github.com/yologdev/yoagent-state) · [Live Agent Repo](https://github.com/yologdev/yoyo-gasp)
+[Website](https://gasp.arclumen.de) · [Specification](SPEC.md) · [Reference Runtime](https://github.com/MKonovalov/yoagent-state) · [Live Agent Repo](https://github.com/MKonovalov/arc-gasp)
 
-[![CI](https://github.com/yologdev/gasp/actions/workflows/ci.yml/badge.svg)](https://github.com/yologdev/gasp/actions/workflows/ci.yml)
+[![CI](https://github.com/MKonovalov/gasp/actions/workflows/ci.yml/badge.svg)](https://github.com/MKonovalov/gasp/actions/workflows/ci.yml)
 [![yoagent-state](https://img.shields.io/crates/v/yoagent-state.svg?label=yoagent-state)](https://crates.io/crates/yoagent-state)
 [![event schema](https://img.shields.io/badge/event_schema-v1-2563eb)](SPEC.md#event-log-format)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -115,11 +115,11 @@ Check 4 is the one that makes "append-only" real: it walks the full git history 
 
 ## Proven in production
 
-GASP is not a paper spec. [yoyo](https://github.com/yologdev/yoyo-evolve) — an autonomous, self-improving agent that has been evolving continuously for 125+ days — emits GASP from every session on an 8-hour cron into its own live agent repo, [yoyo-gasp](https://github.com/yologdev/yoyo-gasp): goals, patches, evals, and decisions from real self-improvement runs, skill evolution, and social sessions, all passing the conformance checker.
+GASP is not a paper spec. [arc](https://github.com/MKonovalov/arc-evolve) — an autonomous, self-improving agent that has been evolving continuously for 125+ days — emits GASP from every session on an 8-hour cron into its own live agent repo, [arc-gasp](https://github.com/MKonovalov/arc-gasp): goals, patches, evals, and decisions from real self-improvement runs, skill evolution, and social sessions, all passing the conformance checker.
 
-This is yoyo's actual `state/events.jsonl`, folded and rendered:
+This is arc's actual `state/events.jsonl`, folded and rendered:
 
-<img src="docs/yoyo-gasp-lineage.png" alt="yoyo's real event log folded into its goal/patch/eval/decision graph" width="100%"/>
+<img src="docs/arc-gasp-lineage.png" alt="arc's real event log folded into its goal/patch/eval/decision graph" width="100%"/>
 
 ## Extensions
 
@@ -129,11 +129,11 @@ This is yoyo's actual `state/events.jsonl`, folded and rendered:
 
 | Repo | Role |
 |---|---|
-| [gasp](https://github.com/yologdev/gasp) (this repo) | The specification, canonical fixture, and conformance checker |
-| [yoagent-state](https://github.com/yologdev/yoagent-state) | Reference runtime — Rust, on [crates.io](https://crates.io/crates/yoagent-state): typed graph, replay/fold, `GitEventStore` with durable append + boundary commits + cross-process lease |
-| [yoyo-evolve](https://github.com/yologdev/yoyo-evolve) | Reference agent — the instrumented executor emitting GASP in production |
-| [yoyo-gasp](https://github.com/yologdev/yoyo-gasp) | A living agent repo — yoyo's portable state, growing autonomously |
-| [gasp.yolog.dev](https://gasp.yolog.dev) | Homepage with an animated log→graph fold |
+| [gasp](https://github.com/MKonovalov/gasp) (this repo) | The specification, canonical fixture, and conformance checker |
+| [yoagent-state](https://github.com/MKonovalov/yoagent-state) | Reference runtime — Rust, on [crates.io](https://crates.io/crates/yoagent-state): typed graph, replay/fold, `GitEventStore` with durable append + boundary commits + cross-process lease |
+| [arc-evolve](https://github.com/MKonovalov/arc-evolve) | Reference agent — the instrumented executor emitting GASP in production |
+| [arc-gasp](https://github.com/MKonovalov/arc-gasp) | A living agent repo — arc's portable state, growing autonomously |
+| [gasp.arclumen.de](https://gasp.arclumen.de) | Homepage with an animated log→graph fold |
 
 ## Credits & license
 

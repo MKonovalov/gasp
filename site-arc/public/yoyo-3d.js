@@ -1,8 +1,8 @@
-/* <yoyo-3d> — toon-shaded 3D yoyo matching the 2D sticker:
+/* <arc-3d> — toon-shaded 3D arc matching the 2D sticker:
    squircle head, cel (3-step) shading, black inverted-hull outlines,
    pink tentacle undersides. Idle bob + cursor tracking. PNG fallback. */
 (function () {
-  class Yoyo3D extends HTMLElement {
+  class arc3D extends HTMLElement {
     connectedCallback() {
       if (this._started) return;
       this._started = true;
@@ -21,7 +21,7 @@
     }
 
     _fallback() {
-      this.innerHTML = '<img src="./yoyo.png" alt="yoyo" style="width:100%; height:100%; object-fit:contain; padding:80px 0;">';
+      this.innerHTML = '<img src="./arc.png" alt="arc" style="width:100%; height:100%; object-fit:contain; padding:80px 0;">';
     }
 
     async _init() {
@@ -40,13 +40,13 @@
       renderer.domElement.style.cssText = 'width:100%; height:100%; display:block; cursor:pointer;';
       this.appendChild(renderer.domElement);
 
-      // Poke interaction — click/tap spins + squishes yoyo (and splashes)
+      // Poke interaction — click/tap spins + squishes arc (and splashes)
       let spinVel = 0, spinOff = 0, squashImp = 0, baseRot = 0, splashQueued = false, xOff = 0;
       this._onDown = () => {
         spinVel += 9;
         squashImp = 0.22;
         splashQueued = true;
-        window.dispatchEvent(new CustomEvent('yoyo-poked'));
+        window.dispatchEvent(new CustomEvent('arc-poked'));
       };
       renderer.domElement.addEventListener('pointerdown', this._onDown);
 
@@ -74,8 +74,8 @@
       const darkMat = new THREE.MeshBasicMaterial({ color: INK });
       const outlineMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
 
-      const yoyo = new THREE.Group();
-      scene.add(yoyo);
+      const arc = new THREE.Group();
+      scene.add(arc);
 
       // --- Head: squircle (sphere pushed toward a rounded cube) ---
       const squircle = (geo, e) => {
@@ -95,7 +95,7 @@
 
       const headGrp = new THREE.Group();
       headGrp.position.y = 0.55;
-      yoyo.add(headGrp);
+      arc.add(headGrp);
 
       const head = new THREE.Mesh(headGeo, bodyMat);
       head.scale.set(1.18, 1.12, 0.95);
@@ -147,7 +147,7 @@
         const tip = new THREE.Mesh(tipGeo, bodyMat);
         tip.position.set(1.85, -1.0, 0);
         grp.add(tip);
-        yoyo.add(grp);
+        arc.add(grp);
         tentacles.push({ grp, angle, phase: i * 0.9 });
       }
 
@@ -232,15 +232,15 @@
         t += dt;
 
         // swim: gentle bob half-submerged + lateral sway
-        yoyo.position.y = Math.sin(t * 1.2) * 0.06 + 0.02;
-        yoyo.position.x = xOff + Math.sin(t * 0.35) * 0.3;
-        yoyo.rotation.z = Math.sin(t * 0.35 + 1.2) * 0.05;
+        arc.position.y = Math.sin(t * 1.2) * 0.06 + 0.02;
+        arc.position.x = xOff + Math.sin(t * 0.35) * 0.3;
+        arc.rotation.z = Math.sin(t * 0.35 + 1.2) * 0.05;
         spinVel *= Math.exp(-2.4 * dt);
         spinOff += spinVel * dt;
         squashImp *= Math.exp(-5 * dt);
         baseRot += ((mx * 0.55 + Math.sin(t * 0.4) * 0.15) - baseRot) * 0.06;
-        yoyo.rotation.y = baseRot + spinOff;
-        yoyo.rotation.x += ((my * 0.18) - yoyo.rotation.x) * 0.06;
+        arc.rotation.y = baseRot + spinOff;
+        arc.rotation.x += ((my * 0.18) - arc.rotation.x) * 0.06;
 
         for (const tc of tentacles) {
           tc.grp.rotation.y = tc.angle + Math.sin(t * 2.4 + tc.phase) * 0.09;
@@ -259,17 +259,17 @@
         pa.needsUpdate = true;
         waterGeo.computeVertexNormals();
 
-        // ripples around yoyo
+        // ripples around arc
         if (splashQueued) {
           let oldest = ripples[0];
           for (const r of ripples) if (r.p > oldest.p) oldest = r;
           oldest.p = 0;
-          oldest.mesh.position.x = yoyo.position.x;
+          oldest.mesh.position.x = arc.position.x;
           splashQueued = false;
         }
         for (const r of ripples) {
           r.p += dt / 2.6;
-          if (r.p >= 1) { r.p -= 1; r.mesh.position.x = yoyo.position.x; }
+          if (r.p >= 1) { r.p -= 1; r.mesh.position.x = arc.position.x; }
           const sc = 0.5 + r.p * 2.1;
           r.mesh.scale.set(sc, 1, sc);
           r.mesh.material.opacity = (1 - r.p) * 0.5;
@@ -292,5 +292,5 @@
       this._raf = requestAnimationFrame(loop);
     }
   }
-  if (!customElements.get('yoyo-3d')) customElements.define('yoyo-3d', Yoyo3D);
+  if (!customElements.get('arc-3d')) customElements.define('arc-3d', arc3D);
 })();
