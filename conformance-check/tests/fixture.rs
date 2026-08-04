@@ -550,6 +550,30 @@ async fn gitventstore_emitted_repo_passes_all_checks() {
         .unwrap()
         .expect("boundary commit");
 
+    // Plant a valid identity and pin its hash in the *emitted* repo. The runtime
+    // (commit_run) writes AGENT.md itself and does not include identity_hash, so
+    // we add it after the boundary commit — exactly as a real GASP repo would be
+    // finalized by a human-gated identity edit (commit rule 4). Without this,
+    // check 8 correctly fails the emitted repo.
+    std::fs::create_dir_all(repo.join("identity")).unwrap();
+    std::fs::write(repo.join("identity/IDENTITY.md"), "id: it\n").unwrap();
+    let mut paths = vec!["identity/IDENTITY.md".to_string()];
+    paths.sort();
+    let mut hasher = sha2::Sha256::new();
+    for rel in &paths {
+        let bytes = std::fs::read(repo.join(rel)).unwrap();
+        hasher.update(rel.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(&bytes);
+    }
+    let pinned = hex(&hasher.finalize());
+    let manifest = format!(
+        "```yaml\nspec_version: 1\nagent_id: it-agent\nidentity_hash: {pinned}\nexecutor: .agent/config.toml\n```\n"
+    );
+    std::fs::write(repo.join("AGENT.md"), manifest).unwrap();
+    git(repo, &["add", "-A"]);
+    git(repo, &["commit", "-qm", "finalize identity"]);
+
     for report in run_all(repo, false) {
         assert!(
             report.passed(),
