@@ -1,0 +1,44 @@
+name: deploy-site-arc
+
+# Publishes the arc agent repo landing page (site-arc/) to
+# arc-gasp.arclumen.de via Cloudflare Workers/Assets.
+# Secrets required (must be added to repo settings — currently ABSENT, so this
+# workflow fails until they exist, same as deploy-site.yml):
+#   CLOUDFLARE_API_TOKEN  - API token with Workers Scripts + Workers Routes perms
+#   CLOUDFLARE_ACCOUNT_ID - the account that owns the arclumen.de zone + custom domain
+# Only runs when the arc landing-page source actually changes.
+#
+# NOTE: arc-gasp.arclumen.de is a custom domain for the PRIVATE arc-gasp agent
+# repo. The page is a read-only "fold the log" view; it must not expose secrets.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site-arc/**"
+      - ".github/workflows/deploy-site-arc.yml"
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site-arc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Pinned (not `@latest`) for deterministic, reproducible deploys.
+      - name: Deploy to Cloudflare
+        run: npx --yes wrangler@4.118.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
