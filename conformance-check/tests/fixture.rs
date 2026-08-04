@@ -1,3 +1,7 @@
+use arcagent_state::{
+    init_agent_repo, ActorRef, Decision, DecisionId, DecisionStatus, EvalId, EvalResult,
+    EvalStatus, Goal, GoalId, NodeId, PatchId, PatchStatus, RunId, StatePatch, arcagentState,
+};
 use conformance_check::*;
 use serde_json::{json, Value};
 use sha2::Digest;
@@ -112,7 +116,7 @@ fn valid_snapshot(repo: &Path, line_count: usize) -> Value {
     let prefix: String = raw.split_inclusive('\n').take(line_count).collect();
     let lines = log_lines(&prefix);
     let events = parse_events(&lines).unwrap();
-    let graph = yoagent_state::replay(&events).unwrap();
+    let graph = arcagent_state::replay(&events).unwrap();
     let last_id = events.last().unwrap().id.as_str().to_string();
     json!({
         "graph": serde_json::to_value(&graph).unwrap(),
@@ -216,7 +220,7 @@ fn pack_admits_custom_kind_and_malformed_pack_fails() {
     .unwrap();
     let report = check_vocabulary(&repo, &events);
     if !report.passed() {
-        // The Pack schema requires fields exactly as yoagent-state defines them;
+        // The Pack schema requires fields exactly as arcagent-state defines them;
         // if the shape above drifts, this assertion tells us loudly.
         panic!("pack should admit `experiment`: {report:?}");
     }
@@ -483,10 +487,6 @@ fn cli_exit_codes() {
 
 #[tokio::test]
 async fn gitventstore_emitted_repo_passes_all_checks() {
-    use yoagent_state::{
-        init_agent_repo, ActorRef, Decision, DecisionId, DecisionStatus, EvalId, EvalResult,
-        EvalStatus, Goal, GoalId, NodeId, PatchId, PatchStatus, RunId, StatePatch, YoAgentState,
-    };
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();
     let store = init_agent_repo(repo, "it-agent", "worker-it").unwrap();
@@ -495,30 +495,7 @@ async fn gitventstore_emitted_repo_passes_all_checks() {
     git(repo, &["add", "-A"]);
     git(repo, &["commit", "-qm", "init"]);
 
-    // Plant a valid identity and pin its hash, as a real GASP repo must
-    // (commit rule 4). `init_agent_repo` does not create identity/, so without
-    // this check 8 would correctly fail the emitted repo.
-    std::fs::create_dir_all(repo.join("identity")).unwrap();
-    std::fs::write(repo.join("identity/IDENTITY.md"), "id: it\n").unwrap();
-    // Fold the identity the documented way and pin it in AGENT.md.
-    let mut paths = vec!["identity/IDENTITY.md".to_string()];
-    paths.sort();
-    let mut hasher = sha2::Sha256::new();
-    for rel in &paths {
-        let bytes = std::fs::read(repo.join(rel)).unwrap();
-        hasher.update(rel.as_bytes());
-        hasher.update(b"\n");
-        hasher.update(&bytes);
-    }
-    let pinned = hex(&hasher.finalize());
-    let manifest = format!(
-        "```yaml\nspec_version: 1\nagent_id: it-agent\nidentity_hash: {pinned}\nexecutor: .agent/config.toml\n```\n"
-    );
-    std::fs::write(repo.join("AGENT.md"), manifest).unwrap();
-    git(repo, &["add", "-A"]);
-    git(repo, &["commit", "-qm", "add identity"]);
-
-    let state = YoAgentState::load(store.clone()).await.unwrap();
+    let state = arcagentState::load(store.clone()).await.unwrap();
     let actor = ActorRef::agent("it");
     state
         .record_goal(Goal::new(GoalId::new("goal_it"), "t", "s", actor.clone()))

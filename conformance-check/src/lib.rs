@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
-use yoagent_state::{replay, Event, Graph, Pack, StateOp};
+use arcagent_state::{replay, Event, Graph, Pack, StateOp};
 
 pub const EVENTS_PATH: &str = "state/events.jsonl";
 
@@ -601,13 +601,13 @@ pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> Chec
         return report;
     }
 
-    let node = |id: &str| graph.get_node(&yoagent_state::NodeId::new(id));
+    let node = |id: &str| graph.get_node(&arcagent_state::NodeId::new(id));
     let prop = |id: &str, key: &str| -> Option<Value> {
         node(id).and_then(|n| n.props.get(key)).cloned()
     };
     let edge = |from: &str, rel: &str, to: &str| -> bool {
         graph
-            .outgoing(&yoagent_state::NodeId::new(from), Some(rel))
+            .outgoing(&arcagent_state::NodeId::new(from), Some(rel))
             .iter()
             .any(|r| r.to.as_str() == to)
     };

@@ -1,0 +1,39 @@
+name: deploy-site
+
+# Publishes the GASP homepage (site/) to gasp.arclumen.de via Cloudflare Workers/Assets.
+# Secrets required (already present in this environment):
+#   CLOUDFLARE_API_TOKEN  - API token with Workers Scripts + Workers Routes perms
+#   CLOUDFLARE_ACCOUNT_ID - the account that owns the arclumen.de zone + custom domain
+# Only runs when the site source actually changes; spec/crate edits won't redeploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Pinned (not `@latest`) for deterministic, reproducible deploys.
+      - name: Deploy to Cloudflare
+        run: npx --yes wrangler@4.118.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
