@@ -1,3 +1,7 @@
+use arcagent_state::{
+    init_agent_repo, ActorRef, Decision, DecisionId, DecisionStatus, EvalId, EvalResult,
+    EvalStatus, Goal, GoalId, NodeId, PatchId, PatchStatus, RunId, StatePatch, arcagentState,
+};
 use conformance_check::*;
 use serde_json::{json, Value};
 use sha2::Digest;
@@ -112,7 +116,7 @@ fn valid_snapshot(repo: &Path, line_count: usize) -> Value {
     let prefix: String = raw.split_inclusive('\n').take(line_count).collect();
     let lines = log_lines(&prefix);
     let events = parse_events(&lines).unwrap();
-    let graph = yoagent_state::replay(&events).unwrap();
+    let graph = arcagent_state::replay(&events).unwrap();
     let last_id = events.last().unwrap().id.as_str().to_string();
     json!({
         "graph": serde_json::to_value(&graph).unwrap(),
@@ -216,7 +220,7 @@ fn pack_admits_custom_kind_and_malformed_pack_fails() {
     .unwrap();
     let report = check_vocabulary(&repo, &events);
     if !report.passed() {
-        // The Pack schema requires fields exactly as yoagent-state defines them;
+        // The Pack schema requires fields exactly as arcagent-state defines them;
         // if the shape above drifts, this assertion tells us loudly.
         panic!("pack should admit `experiment`: {report:?}");
     }
@@ -483,10 +487,6 @@ fn cli_exit_codes() {
 
 #[tokio::test]
 async fn gitventstore_emitted_repo_passes_all_checks() {
-    use yoagent_state::{
-        init_agent_repo, ActorRef, Decision, DecisionId, DecisionStatus, EvalId, EvalResult,
-        EvalStatus, Goal, GoalId, NodeId, PatchId, PatchStatus, RunId, StatePatch, YoAgentState,
-    };
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();
     let store = init_agent_repo(repo, "it-agent", "worker-it").unwrap();
@@ -495,7 +495,7 @@ async fn gitventstore_emitted_repo_passes_all_checks() {
     git(repo, &["add", "-A"]);
     git(repo, &["commit", "-qm", "init"]);
 
-    let state = YoAgentState::load(store.clone()).await.unwrap();
+    let state = arcagentState::load(store.clone()).await.unwrap();
     let actor = ActorRef::agent("it");
     state
         .record_goal(Goal::new(GoalId::new("goal_it"), "t", "s", actor.clone()))

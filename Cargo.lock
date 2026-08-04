@@ -12,6 +12,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcagent-state"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45dd385a2e1089297d1c45927f0fd8c57e71ed31a5849320ef59aaa753de5305"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,12 +102,12 @@ dependencies = [
 name = "conformance-check"
 version = "0.1.0"
 dependencies = [
+ "arcagent-state",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
- "yoagent-state",
 ]
 
 [[package]]
@@ -599,21 +614,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
-]
-
-[[package]]
-name = "yoagent-state"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7745b432c1d947c2e90b44c14b96d5809168fb8ab5e92e9a6a687d423c3266e"
-dependencies = [
- "async-trait",
- "chrono",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "uuid",
 ]
 
 [[package]]

@@ -4,10 +4,10 @@
 
 **A git-native standard for portable agent state.**
 
-[Website](https://gasp.arclumen.de) · [Specification](SPEC.md) · [Reference Runtime](https://github.com/MKonovalov/yoagent-state) · [Live Agent Repo](https://github.com/MKonovalov/arc-gasp)
+[Website](https://gasp.arclumen.de) · [Specification](SPEC.md) · [Reference Runtime](https://github.com/MKonovalov/arcagent-state) · [Live Agent Repo](https://github.com/MKonovalov/arc-gasp)
 
 [![CI](https://github.com/MKonovalov/gasp/actions/workflows/ci.yml/badge.svg)](https://github.com/MKonovalov/gasp/actions/workflows/ci.yml)
-[![yoagent-state](https://img.shields.io/crates/v/yoagent-state.svg?label=yoagent-state)](https://crates.io/crates/yoagent-state)
+[![arcagent-state](https://img.shields.io/crates/v/arcagent-state.svg?label=arcagent-state)](https://crates.io/crates/arcagent-state)
 [![event schema](https://img.shields.io/badge/event_schema-v1-2563eb)](SPEC.md#event-log-format)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -130,13 +130,13 @@ This is arc's actual `state/events.jsonl`, folded and rendered:
 | Repo | Role |
 |---|---|
 | [gasp](https://github.com/MKonovalov/gasp) (this repo) | The specification, canonical fixture, and conformance checker |
-| [yoagent-state](https://github.com/MKonovalov/yoagent-state) | Reference runtime — Rust, on [crates.io](https://crates.io/crates/yoagent-state): typed graph, replay/fold, `GitEventStore` with durable append + boundary commits + cross-process lease |
+| [arcagent-state](https://github.com/MKonovalov/arcagent-state) | Reference runtime — Rust, on [crates.io](https://crates.io/crates/arcagent-state): typed graph, replay/fold, `GitEventStore` with durable append + boundary commits + cross-process lease |
 | [arc-evolve](https://github.com/MKonovalov/arc-evolve) | Reference agent — the instrumented executor emitting GASP in production |
 | [arc-gasp](https://github.com/MKonovalov/arc-gasp) | A living agent repo — arc's portable state, growing autonomously |
 | [gasp.arclumen.de](https://gasp.arclumen.de) | Homepage with an animated log→graph fold |
 
 ## Credits & license
 
-The "log is the agent" idea descends from [Yohei Nakajima's ActiveGraph](https://github.com/yoheinakajima/activegraph); `yoagent-state` is an independent Rust implementation of it, and GASP binds that idea to git as the interchange substrate.
+The "log is the agent" idea descends from [Yohei Nakajima's ActiveGraph](https://github.com/yoheinakajima/activegraph); `arcagent-state` is an independent Rust implementation of it, and GASP binds that idea to git as the interchange substrate.
 
 [MIT](LICENSE)

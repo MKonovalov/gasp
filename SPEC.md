@@ -3,7 +3,7 @@
 **GASP** (Git Agent State Protocol) is a standard for portable agent state, native to git. Throughout this document, "GASP" and "the protocol" both refer to the normative standard defined in Part I. The name states the substrate: an agent's durable state lives in a **git** repository — an append-only event log that folds into a typed graph of goals, patches, evals, and decisions, and that graph, not a flat transcript, is what makes it agent state.
 
 **Status:** buildable.
-**Part I** is the normative protocol — no arc, no library, no language. **Part II** is the reference runtime (`yoagent-state`, Rust). **Part III** is the reference adapters for wrapping closed agents (Claude Code, Codex, and any other). **Part IV** is the reference agent (arc). **Part V** is honest caveats. **Part VI** is the conformance kit (fixture + checker).
+**Part I** is the normative protocol — no arc, no library, no language. **Part II** is the reference runtime (`arcagent-state`, Rust). **Part III** is the reference adapters for wrapping closed agents (Claude Code, Codex, and any other). **Part IV** is the reference agent (arc). **Part V** is honest caveats. **Part VI** is the conformance kit (fixture + checker).
 
 The one-sentence idea: **an agent is stateless; its durable state is an append-only event log that folds into a queryable graph, committed into a git repo, and that repo — not the model or the runtime — is the agent.** Point any GASP-conformant runtime at the repo URL and the same agent resumes anywhere, on any model.
 
@@ -244,11 +244,11 @@ Whatever an agent exposes picks its rung. This is how any agent — named or not
 
 ---
 
-# Part II — Reference runtime: `yoagent-state` (Rust)
+# Part II — Reference runtime: `arcagent-state` (Rust)
 
 The cheap path for a Rust agent to satisfy Part I. A Python or TS agent implements the same layout itself and does not need this.
 
-`yoagent-state` (v0.4.0, MIT) is an ActiveGraph-inspired continuity runtime. It records the append-only event log, folds it into the semantic graph, and ships the read-side primitives Part I only implies: **lineage queries, replay, fork, diff, typed packs, policy gates, behavior subscriptions.** You don't hand-author the log format — the runtime writes it via `apply_ops`.
+`arcagent-state` (v0.4.0, MIT) is an ActiveGraph-inspired continuity runtime. It records the append-only event log, folds it into the semantic graph, and ships the read-side primitives Part I only implies: **lineage queries, replay, fork, diff, typed packs, policy gates, behavior subscriptions.** You don't hand-author the log format — the runtime writes it via `apply_ops`.
 
 **Why this and not ActiveGraph directly.** ActiveGraph is the inspiration, credited in the repo's `ACKNOWLEDGMENTS.md`. But it is Python, and the target agents are Rust single binaries shipped via brew/git-URL init; a Python sidecar or FFI in the hot path breaks the distribution story and fragments the event vocabulary across two implementations. Using ActiveGraph directly wouldn't even save work — it stores to its own event store, so a git adapter is needed either way. Being the canonical Rust implementation of "the log is the agent" is the stronger position; attribution plus protocol-compatibility claims the lineage without the dependency.
 
@@ -266,24 +266,24 @@ Neither guarantee is part of GASP — another language's impl meets conformance 
 Verified against the v0.4.0 source. `load` folds the log into the graph (the projector folds **only** `state.ops_applied`, exactly as Part I specifies). The **paired** typed helpers — `record_goal`, `record_task`, `record_observation`, `record_failure`, `record_hypothesis`, `propose_patch`, `record_eval`, `record_decision_node`, `record_frame`, plus `record_run_started`, `record_run_finished`, `record_model_call`, `record_tool_call`, `record_project_snapshot`, and the `update_*_status` family — emit a domain event **and** the `state.ops_applied` that mutates it, linked per the pairing rule. Events recorded during an open run auto-chain to `run.started` and carry the run id as `correlation_id`; the finish pair closes the folded run node (`status: finished` + outcome). (`record_decision`, `record_eval_result`, and `link` are lower-level ops-only paths; `apply_ops` is the raw escape hatch.)
 
 ```rust
-let state = YoAgentState::load(store).await?;                  // fold events -> graph
+let state = arcagentState::load(store).await?;                // fold events -> graph
 state.record_goal(Goal::new(goal_id, "Make retry reliable", "...", actor)).await?;
 state.record_eval(actor, eval_result, Some(patch_id)).await?; // eval + patch validated_by eval
 state.record_decision_node(actor, decision, Some(patch_node)).await?; // decision + approved_by
 print!("{}", state.lineage(node).await.to_markdown());        // the read side Part I implies
 ```
 
-For callback-driven agents, the `YoAgentStateSink` trait is the in-process adapter — `on_run_started`, `on_run_finished`, `on_model_called`, `on_model_finished`, `on_tool_called`, `on_tool_finished` — i.e. the integration contract as a typed interface; `YoAgentStateAdapter` is the shipped impl. Scoring uses the same primitives — `patch`/`eval`/`decision`, **policy gates** for the promotion gate (thresholds as config), **fork** for counterfactual A/B.
+For callback-driven agents, the `arcagentStateSink` trait is the in-process adapter — `on_run_started`, `on_run_finished`, `on_model_called`, `on_model_finished`, `on_tool_called`, `on_tool_finished` — i.e. the integration contract as a typed interface; `arcagentStateAdapter` is the shipped impl. Scoring uses the same primitives — `patch`/`eval`/`decision`, **policy gates** for the promotion gate (thresholds as config), **fork** for counterfactual A/B.
 
-**The store contract ships in 0.3.0+.** Three `EventStore` impls: `MemoryEventStore` (tests), `JsonlEventStore` (small logs; rewrites the whole file per append, in-process lock only — kept for compatibility), and **`GitEventStore`**, which satisfies both store-contract guarantees: append + flush + fsync per batch (plus a parent-directory fsync on first creation), an atomically-acquired cross-process single-writer lease checked *inside* `append`, and pathspec-scoped boundary commits via `commit_run(&RunId, &GoalId, outcome, extra_paths)` carrying the `Run-Id`/`Goal`/`Outcome` trailers. The pairing rule is implemented (the paired helpers link each ops event's `causation_id` to its domain event), and run transitions are validated (double-start / mismatched-finish are errors). Repos emitted through the paired `record_*` helpers or the **`YoAgentStateSink` adapter** (conformant as of 0.4.0), on `GitEventStore`, pass all 7 conformance checks (Part VI).
+**The store contract ships in 0.3.0+.** Three `EventStore` impls: `MemoryEventStore` (tests), `JsonlEventStore` (small logs; rewrites the whole file per append, in-process lock only — kept for compatibility), and **`GitEventStore`**, which satisfies both store-contract guarantees: append + flush + fsync per batch (plus a parent-directory fsync on first creation), an atomically-acquired cross-process single-writer lease checked *inside* `append`, and pathspec-scoped boundary commits via `commit_run(&RunId, &GoalId, outcome, extra_paths)` carrying the `Run-Id`/`Goal`/`Outcome` trailers. The pairing rule is implemented (the paired helpers link each ops event's `causation_id` to its domain event), and run transitions are validated (double-start / mismatched-finish are errors). Repos emitted through the paired `record_*` helpers or the **`arcagentStateSink` adapter** (conformant as of 0.4.0), on `GitEventStore`, pass all 7 conformance checks (Part VI).
 
 **Known 0.4.0 gaps**: there is no snapshot emitter yet — the conformance checker is the executable definition of the snapshot format; the open-run marker is in-memory only (`load` does not recover an unfinished run, so a process restarted mid-run records uncorrelated roots until it starts a new run); the adapter's `*_finished` callbacks record raw events without updating the call nodes' outcome props; and the run structs' `metadata` fields are not persisted by the paired helpers.
 
-## What yoagent-state subsumes
+## What arcagent-state subsumes
 
 Earlier drafts of this spec had the agent inventing two mechanisms the library already provides. Defer to the library:
 
-| Earlier draft invented | yoagent-state primitive that replaces it |
+| Earlier draft invented | arcagent-state primitive that replaces it |
 |---|---|
 | a flat session index file | `goal`/`task`/`run` events; fast query is a **lineage query**, not a grepped file |
 | a separate scoring stream | the **patch → eval → decision → promotion** lifecycle |
@@ -292,7 +292,7 @@ Earlier drafts of this spec had the agent inventing two mechanisms the library a
 
 # Part III — Reference adapters: wrapping closed agents
 
-Concrete adapters for two common coding agents — the outside-the-loop case of the adaptation contract. **Transcript locations and hook surfaces shift between releases; treat every path and field below as a starting point and verify against current docs before building.** (Terminology: yoagent-state's own `projector` module is the event→graph reducer and its `adapter`/`YoAgentStateSink` is the in-process event sink; the transcript adapters here are external and new — they emit the same events from an agent you don't control.)
+Concrete adapters for two common coding agents — the outside-the-loop case of the adaptation contract. **Transcript locations and hook surfaces shift between releases; treat every path and field below as a starting point and verify against current docs before building.** (Terminology: arcagent-state's own `projector` module is the event→graph reducer and its `adapter`/`arcagentStateSink` is the in-process event sink; the transcript adapters here are external and new — they emit the same events from an agent you don't control.)
 
 ## Claude Code
 
@@ -318,10 +318,10 @@ The contract, not a per-agent special case. Whatever the agent exposes picks the
 arc is the proof GASP works end to end. It is one agent; GASP is agent-agnostic. Its own motto is the layering:
 
 ```
-yoagent executes.   yoagent-state remembers.   arc evolve improves.   git ships.
+yoagent executes.   arcagent-state remembers.   arc evolve improves.   git ships.
 ```
 
-Today `arc-evolve` depends on `yoagent` (the executor) but **not yet on `yoagent-state`** — the wiring below is the integration to build, not a description of what exists. The mapping (verified against the public repo, July 2026):
+Today `arc-evolve` depends on `yoagent` (the executor) but **not yet on `arcagent-state`** — the wiring below is the integration to build, not a description of what exists. The mapping (verified against the public repo, July 2026):
 
 | arc today | GASP home | Notes |
 |---|---|---|
@@ -333,7 +333,7 @@ Today `arc-evolve` depends on `yoagent` (the executor) but **not yet on `yoagent
 | `skills/` + `skills_attic/` (top-level, auto-scanned) | `skills/` | Already the right shape; the attic is retired versions |
 | audit-log branch + session tags | `transcripts/` cold store | Session evidence already lives out of the hot path — a branch instead of a directory |
 | GH Actions: `evolve.yml` → `evolve.sh`: assess → plan → ≤3 tasks → `cargo build`+`cargo test` + evaluator gate → pass=commit, fail=`git reset --hard` + auto-filed issue | the control loop + patch/eval/decision | "pass→commit, fail→revert" *is* the patch lifecycle |
-| (no semantic log / lineage today) | `state/events.jsonl` via yoagent-state | The core addition: lineage, replay, fork, version scoring |
+| (no semantic log / lineage today) | `state/events.jsonl` via arcagent-state | The core addition: lineage, replay, fork, version scoring |
 
 Because arc's existing layout predates GASP, `AGENT.md` declares where identity and memory actually live (the manifest binds locations; the layout above is the default, not a straitjacket for adopters with history). The one thing arc gains is the semantic log itself — turning git history into a queryable lineage graph and making the self-improvement ratchet a primitive rather than an ad-hoc commit-or-revert script.
 
@@ -355,7 +355,7 @@ Because arc's existing layout predates GASP, `AGENT.md` declares where identity 
 **Reference-impl specific:**
 
 - **Determinism.** True *transcript* replay needs cached model/tool responses (an idea inherited from ActiveGraph). Not needed for the semantic-log hot path; only if you enable transcript replay.
-- **Maturity.** `yoagent-state` is young (v0.4.0) and small by design — it deliberately does not handle identity/skills/memory, which is Part I's job, not a gap. The API will move (0.3.0 added run-transition validation, 0.4.0 changed adapter payload shapes); pin versions, track its CHANGELOG, and keep the event vocabulary protocol-compatible with ActiveGraph so the lineage claim stays clean.
+- **Maturity.** `arcagent-state` is young (v0.4.0) and small by design — it deliberately does not handle identity/skills/memory, which is Part I's job, not a gap. The API will move (0.3.0 added run-transition validation, 0.4.0 changed adapter payload shapes); pin versions, track its CHANGELOG, and keep the event vocabulary protocol-compatible with ActiveGraph so the lineage claim stays clean.
 - **Lease scope.** `GitEventStore`'s file lease is decided by atomic exclusive create — sound on a local filesystem, advisory on network filesystems, and stealing an *expired* lease retains a narrow multi-process race window. One agent repo per machine (the intended deployment) is well inside the guarantee.
 
 ---
