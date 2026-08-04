@@ -441,7 +441,7 @@ fn missing_log_is_a_conformance_failure_not_a_tool_error() {
     let dir = tempfile::tempdir().unwrap();
     git(dir.path(), &["init", "-q"]);
     let reports = run_all(dir.path(), false);
-    assert_eq!(reports.len(), 7);
+    assert_eq!(reports.len(), 8);
     assert!(!reports[0].passed(), "check 1 must fail on a missing log");
     assert!(reports.iter().filter(|r| !r.passed()).count() >= 5);
 }
@@ -494,6 +494,29 @@ async fn gitventstore_emitted_repo_passes_all_checks() {
     git(repo, &["config", "user.email", "t@t"]);
     git(repo, &["add", "-A"]);
     git(repo, &["commit", "-qm", "init"]);
+
+    // Plant a valid identity and pin its hash, as a real GASP repo must
+    // (commit rule 4). `init_agent_repo` does not create identity/, so without
+    // this check 8 would correctly fail the emitted repo.
+    std::fs::create_dir_all(repo.join("identity")).unwrap();
+    std::fs::write(repo.join("identity/IDENTITY.md"), "id: it\n").unwrap();
+    // Fold the identity the documented way and pin it in AGENT.md.
+    let mut paths = vec!["identity/IDENTITY.md".to_string()];
+    paths.sort();
+    let mut hasher = sha2::Sha256::new();
+    for rel in &paths {
+        let bytes = std::fs::read(repo.join(rel)).unwrap();
+        hasher.update(rel.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(&bytes);
+    }
+    let pinned = hex(&hasher.finalize());
+    let manifest = format!(
+        "```yaml\nspec_version: 1\nagent_id: it-agent\nidentity_hash: {pinned}\nexecutor: .agent/config.toml\n```\n"
+    );
+    std::fs::write(repo.join("AGENT.md"), manifest).unwrap();
+    git(repo, &["add", "-A"]);
+    git(repo, &["commit", "-qm", "add identity"]);
 
     let state = YoAgentState::load(store.clone()).await.unwrap();
     let actor = ActorRef::agent("it");
@@ -559,4 +582,67 @@ async fn gitventstore_emitted_repo_passes_all_checks() {
             report.failures
         );
     }
+}
+
+// ---- check 8: identity-hash integrity ----
+
+#[test]
+fn identity_hash_passes_on_fixture() {
+    // The fixture's pinned identity_hash already matches the folded identity/.
+    let report = check_identity_hash(&fixture_dir());
+    assert!(report.passed(), "{report:?}");
+}
+
+#[test]
+fn identity_hash_fails_on_tampered_identity() {
+    let dir = fixture_in_temp_git();
+    let repo = dir.path().join("repo");
+    // Append a byte to one identity file without re-pinning the manifest.
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(repo.join("identity/IDENTITY.md"))
+        .unwrap();
+    f.write_all(b"\n# tampered\n").unwrap();
+    drop(f);
+    let report = check_identity_hash(&repo);
+    assert!(fails_with(&report, "identity_hash mismatch"), "{report:?}");
+}
+
+#[test]
+fn identity_hash_fails_when_pin_missing() {
+    let dir = fixture_in_temp_git();
+    let repo = dir.path().join("repo");
+    let manifest = repo.join("AGENT.md");
+    let text = std::fs::read_to_string(&manifest).unwrap();
+    let stripped: String = text.lines().filter(|l| !l.trim().starts_with("identity_hash:")).collect::<Vec<_>>().join("\n");
+    std::fs::write(&manifest, stripped).unwrap();
+    let report = check_identity_hash(&repo);
+    assert!(fails_with(&report, "has no `identity_hash:`"), "{report:?}");
+}
+
+#[test]
+fn identity_hash_fails_when_identity_dir_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    git(dir.path(), &["config", "user.name", "t"]);
+    git(dir.path(), &["config", "user.email", "t@t"]);
+    // Manifest present, but no identity/ and no IDENTITY.md at root.
+    std::fs::write(
+        dir.path().join("AGENT.md"),
+        "```yaml\nspec_version: 1\nagent_id: x\nidentity_hash: abc\n```\n",
+    )
+    .unwrap();
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-qm", "init"]);
+    let report = check_identity_hash(dir.path());
+    assert!(fails_with(&report, "no identity/ directory or IDENTITY.md"), "{report:?}");
+}
+
+#[test]
+fn run_all_reports_eight_checks() {
+    let dir = fixture_in_temp_git();
+    let reports = run_all(&dir.path().join("repo"), true);
+    assert_eq!(reports.len(), 8, "check 8 must be part of run_all");
+    assert!(reports[7].passed(), "fixture check 8 must pass: {:?}", reports[7].failures);
 }

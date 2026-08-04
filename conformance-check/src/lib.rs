@@ -645,6 +645,123 @@ pub fn check_restore(repo: &Path, events: &[Event], fixture_facts: bool) -> Chec
     report
 }
 
+/// Check 8 — identity-hash integrity.
+///
+/// Restores step 2 obligation (SPEC Part I restore contract / commit rule 4):
+/// the `identity_hash` pinned in `AGENT.md` must equal the SHA-256 over the
+/// `identity/` directory, computed the documented way — each file's relative
+/// path followed by a newline and its bytes, in byte-order (`LC_ALL=C`) sorted
+/// path order:
+///
+/// ```text
+/// find identity -type f | LC_ALL=C sort | while IFS= read -r f; do
+///     printf '%s\n' "$f"; cat "$f"; done | shasum -a 256
+/// ```
+///
+/// This control previously existed only on paper: the manifest declared a hash
+/// nobody verified. A repo that re-pins after a legitimate human-gated identity
+/// edit stays conformant; a repo whose `identity/` drifted (or was tampered)
+/// without re-pinning fails. Fails closed on every error — missing manifest,
+/// missing field, missing identity dir, read error, mismatch.
+pub fn check_identity_hash(repo: &Path) -> CheckReport {
+    let mut report = CheckReport::new(8, "identity-hash integrity");
+    if !repo.join("AGENT.md").is_file() {
+        report
+            .failures
+            .push("AGENT.md manifest missing (cannot verify identity_hash)".into());
+        return report;
+    }
+
+    // Extract `identity_hash:` from the manifest's YAML fence.
+    let manifest = match std::fs::read_to_string(repo.join("AGENT.md")) {
+        Ok(s) => s,
+        Err(e) => {
+            report
+                .failures
+                .push(format!("AGENT.md unreadable: {e}"));
+            return report;
+        }
+    };
+    let Some(pinned) = manifest
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("identity_hash:"))
+        .map(|v| v.trim().to_string())
+    else {
+        report
+            .failures
+            .push("AGENT.md has no `identity_hash:` field (manifest must declare it)".into());
+        return report;
+    };
+    if pinned.is_empty() {
+        report
+            .failures
+            .push("AGENT.md `identity_hash:` is empty".into());
+        return report;
+    }
+
+    // Identity source: directory layout `identity/` (canonical), or the legacy
+    // single-file layout `IDENTITY.md` at repo root.
+    let identity_dir = repo.join("identity");
+    let (root, layout): (&Path, &str) = if identity_dir.is_dir() {
+        (&identity_dir, "identity/")
+    } else if repo.join("IDENTITY.md").is_file() {
+        (repo, "IDENTITY.md (legacy root)")
+    } else {
+        report.failures.push(
+            "no identity/ directory or IDENTITY.md (nothing to hash)".into(),
+        );
+        return report;
+    };
+
+    // Gather relative paths, byte-order sorted, exactly as the recipe specifies.
+    let mut paths: Vec<String> = match std::fs::read_dir(root) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| {
+                e.path()
+                    .strip_prefix(repo)
+                    .unwrap_or(&e.path())
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect(),
+        Err(e) => {
+            report
+                .failures
+                .push(format!("cannot read identity dir: {e}"));
+            return report;
+        }
+    };
+    paths.sort();
+
+    // Fold the bytes: path + '\n' + file-bytes, per file, in sorted order.
+    let mut hasher = Sha256::new();
+    for rel in &paths {
+        let abs = repo.join(rel);
+        let bytes = match std::fs::read(&abs) {
+            Ok(b) => b,
+            Err(e) => {
+                report
+                    .failures
+                    .push(format!("cannot read {rel}: {e}"));
+                return report;
+            }
+        };
+        hasher.update(rel.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(&bytes);
+    }
+    let computed = hex(&hasher.finalize());
+
+    if computed != pinned {
+        report.failures.push(format!(
+            "identity_hash mismatch: manifest pins {pinned}, but {layout} folds to {computed}"
+        ));
+    }
+    report
+}
+
 /// Check 7 — domain↔ops consistency (the pairing rule): every entity-creating
 /// domain event (the PAIRED_KINDS table) is materialized by EXACTLY ONE
 /// `state.ops_applied` event whose causation_id names it and whose CreateNode
@@ -772,6 +889,7 @@ pub fn run_all(repo: &Path, fixture_facts: bool) -> Vec<CheckReport> {
                 unavailable(5, "causation integrity"),
                 unavailable(6, "restore"),
                 unavailable(7, "domain↔ops consistency"),
+                check_identity_hash(repo),
             ];
         }
     };
@@ -786,6 +904,7 @@ pub fn run_all(repo: &Path, fixture_facts: bool) -> Vec<CheckReport> {
             check_causation(&events),
             check_restore(repo, &events, fixture_facts),
             check_pairing(&events),
+            check_identity_hash(repo),
         ],
         Err(_) => {
             let unparsed = |n: u8, name: &'static str| {
@@ -799,6 +918,7 @@ pub fn run_all(repo: &Path, fixture_facts: bool) -> Vec<CheckReport> {
                 unparsed(5, "causation integrity"),
                 unparsed(6, "restore"),
                 unparsed(7, "domain↔ops consistency"),
+                check_identity_hash(repo),
             ]
         }
     }
