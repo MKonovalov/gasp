@@ -2,10 +2,13 @@ name: deploy-site-arc
 
 # Publishes the arc agent repo landing page (site-arc/) to
 # arc-gasp.arclumen.de via Cloudflare Workers/Assets.
-# Secrets required (must be added to repo settings — currently ABSENT, so this
-# workflow fails until they exist, same as deploy-site.yml):
-#   CLOUDFLARE_API_TOKEN  - API token with Workers Scripts + Workers Routes perms
-#   CLOUDFLARE_ACCOUNT_ID - the account that owns the arclumen.de zone + custom domain
+# Cloudflare creds are pulled at runtime from Bitwarden Secrets Manager (BWS)
+# via bitwarden/sm-action. Required GitHub setup (repo Settings):
+#   - Secret   BWS_ACCESS_TOKEN           : a BWS service-account access token (NOT a UUID)
+#   - Variable SM_CLOUDFLARE_API_TOKEN    : the BWS UUID of the CF API-token secret
+#   - Variable SM_CLOUDFLARE_ACCOUNT_ID   : the BWS UUID of the CF Account-ID secret
+# The VARs hold UUIDs (pointers); the real secret VALUES stay in BWS. sm-action
+# resolves them to the actual creds and exports them as CLOUDFLARE_* env vars.
 # Only runs when the arc landing-page source actually changes.
 #
 # NOTE: arc-gasp.arclumen.de is a custom domain for the PRIVATE arc-gasp agent
@@ -36,9 +39,22 @@ jobs:
         with:
           node-version: 22
 
+      # --- Pull Cloudflare creds from Bitwarden Secrets Manager (BWS) ---
+      # UUIDs live in GitHub *variables* (vars.SM_*); the actual secret values
+      # are resolved at runtime and exported as the CLOUDFLARE_* env vars.
+      - name: Pull secrets from Bitwarden
+        id: bws
+        uses: bitwarden/sm-action@v3.0.1
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: eu
+          secrets: |
+            ${{ vars.SM_CLOUDFLARE_API_TOKEN }} > CLOUDFLARE_API_TOKEN
+            ${{ vars.SM_CLOUDFLARE_ACCOUNT_ID }} > CLOUDFLARE_ACCOUNT_ID
+
       # Pinned (not `@latest`) for deterministic, reproducible deploys.
       - name: Deploy to Cloudflare
         run: npx --yes wrangler@4.118.0 deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
